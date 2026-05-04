@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Turnier Manager - Admin</title>
+    <style>
+        :root { --bg: #1e1e2f; --surface: #2a2a40; --primary: #00d2ff; --text: #ffffff; --red: #ff3366; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--bg); color: var(--text); padding: 20px; }
+        .container { max-width: 800px; margin: 0 auto; background: var(--surface); padding: 20px; border-radius: 12px; }
+        h1, h2 { text-align: center; color: var(--primary); }
+        button { background: var(--primary); color: #000; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: bold; margin: 5px; }
+        button:hover { opacity: 0.8; }
+        .btn-red { background: var(--red); color: white; }
+        input, select { padding: 10px; margin: 5px; border-radius: 6px; border: 1px solid #555; background: #333; color: white; }
+        .team-row { display: flex; gap: 10px; margin-bottom: 10px; align-items: center; }
+        #dashboard { display: none; }
+        .match-card { background: #333; padding: 15px; margin-bottom: 10px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; }
+        .match-inputs input { width: 50px; text-align: center; }
+        .timer-box { text-align: center; font-size: 48px; font-weight: bold; margin: 20px 0; }
+        .badge { display: inline-block; width: 15px; height: 15px; border-radius: 50%; margin-right: 10px; }
+    </style>
+</head>
+<body>
+
+<div class="container" id="setup-screen">
+    <h1>🏆 Turnier Launcher</h1>
+    <div style="text-align: center; margin-bottom: 30px;">
+        <p>1. Öffne zuerst das Public Display (für den Monitor/Beamer).</p>
+        <button onclick="window.open('public.html', '_blank')">📺 Public Display in neuem Fenster öffnen</button>
+    </div>
+    
+    <hr style="border-color: #444;">
+
+    <h2>Neues Turnier erstellen</h2>
+    <div class="team-row">
+        <label>Anzahl Spielfelder:</label>
+        <input type="number" id="num-fields" value="2" min="1" max="10">
+    </div>
+    <div id="team-inputs"></div>
+    <button onclick="addTeamInput()">+ Weiteres Team (max 25)</button>
+    <button onclick="startTournament()" style="width: 100%; margin-top: 20px; font-size: 1.2em;">🚀 Turnier Generieren & Starten</button>
+</div>
+
+<div class="container" id="dashboard">
+    <h1>👑 Admin Panel</h1>
+    <div class="timer-box">
+        <span id="time-display">12:00</span>
+        <br>
+        <button onclick="startTimer()">▶ Start</button>
+        <button onclick="pauseTimer()">⏸ Pause</button>
+        <button onclick="playHorn()" class="btn-red">🔊 Tröte</button>
+    </div>
+
+    <h2>Aktuelle Spiele (Runde <span id="current-round-text">1</span>)</h2>
+    <div id="active-matches"></div>
+    <button onclick="saveResults()" style="width: 100%; margin-top: 20px;">💾 Ergebnisse speichern & Nächste Runde</button>
+</div>
+
+<script>
+    const COLORS = ['#FF5733', '#33FF57', '#3357FF', '#F033FF', '#33FFF0', '#FFD433', '#FF3380', '#80FF33', '#8033FF', '#FF8033', '#33FF80', '#3380FF', '#FF33D4', '#D4FF33', '#D433FF', '#33D4FF', '#A133FF', '#FF33A1', '#33FFA1', '#FFA133', '#33A1FF', '#A1FF33', '#FF5780', '#57FF80', '#ffffff'];
+    let state = { teams: [], groups: [], timeslots: [], currentSlot: 0, phase: 'pause', timeRemaining: 720, isTimerRunning: false };
+    const bc = new BroadcastChannel('tournament_channel');
+    let timerInterval;
+
+    // --- SETUP LOGIK ---
+    function addTeamInput() {
+        if(document.querySelectorAll('.team-input').length >= 25) return alert("Maximal 25 Teams!");
+        const div = document.createElement('div');
+        div.className = 'team-row';
+        div.innerHTML = `
+            <input type="text" class="team-input" placeholder="Team Name" required>
+            <select class="team-strength">
+                <option value="1">Schwach</option>
+                <option value="2" selected>Mittel</option>
+                <option value="3">Stark</option>
+            </select>
+            <button onclick="this.parentElement.remove()" class="btn-red">X</button>
+        `;
+        document.getElementById('team-inputs').appendChild(div);
+    }
+
+    // Initiale 4 Teams
+    for(let i=0; i<4; i++) addTeamInput();
+
+    function startTournament() {
+        const inputs = document.querySelectorAll('.team-input');
+        const strengths = document.querySelectorAll('.team-strength');
+        let teams = [];
+        inputs.forEach((input, i) => {
+            if(input.value.trim() !== '') {
+                teams.push({ id: i, name: input.value.trim(), strength: parseInt(strengths[i].value), color: COLORS[i], points: 0, diff: 0, matchesPlayed: 0 });
+            }
+        });
+
+        if(teams.length < 4) return alert("Bitte mindestens 4 Teams eingeben!");
+
+        const fields = parseInt(document.getElementById('num-fields').value);
+        
+        // Gruppen berechnen (Skalierung)
+        let numGroups = 1;
+        if(teams.length >= 8 && teams.length <= 11) numGroups = 2;
+        else if(teams.length >= 12 && teams.length <= 17) numGroups = 3;
+        else if(teams.length >= 18) numGroups = 4;
+
+        // Snake Draft
+        teams.sort((a, b) => b.strength - a.strength);
+        state.groups = Array.from({length: numGroups}, () => []);
+        let dir = 1, g = 0;
+        teams.forEach(t => {
+            state.groups[g].push(t);
+            g += dir;
+            if(g >= numGroups || g < 0) { dir *= -1; g += dir; }
+        });
+
+        // Spiele generieren (Round Robin pro Gruppe)
+        let allMatches = [];
+        state.groups.forEach((group, gIdx) => {
+            for(let i=0; i<group.length; i++) {
+                for(let j=i+1; j<group.length; j++) {
+                    allMatches.push({ t1: group[i], t2: group[j], groupIdx: gIdx, score1: null, score2: null });
+                }
+            }
+        });
+
+        // Greedy Scheduler für N Felder
+        state.timeslots = [];
+        for (let match of allMatches) {
+            let placed = false;
+            for (let slot of state.timeslots) {
+                if (slot.matches.length < fields && !slot.teamsPlaying.has(match.t1.id) && !slot.teamsPlaying.has(match.t2.id)) {
+                    slot.matches.push(match);
+                    slot.teamsPlaying.add(match.t1.id);
+                    slot.teamsPlaying.add(match.t2.id);
+                    placed = true;
+                    break;
+                }
+            }
+            if (!placed) {
+                state.timeslots.push({ matches: [match], teamsPlaying: new Set([match.t1.id, match.t2.id]) });
+            }
+        }
+        
+        // Sets bereinigen (JSON macht sonst Probleme beim Senden)
+        state.timeslots.forEach(slot => delete slot.teamsPlaying);
+        state.teams = teams;
+        
+        document.getElementById('setup-screen').style.display = 'none';
+        document.getElementById('dashboard').style.display = 'block';
+        updateAdminView();
+        broadcastState();
+    }
+
+    // --- ADMIN LOGIK ---
+    function updateAdminView() {
+        document.getElementById('current-round-text').innerText = state.currentSlot + 1;
+        const container = document.getElementById('active-matches');
+        container.innerHTML = '';
+        
+        if(state.currentSlot >= state.timeslots.length) {
+            container.innerHTML = "<h3>Gruppenphase beendet!</h3>";
+            return;
+        }
+
+        const slot = state.timeslots[state.currentSlot];
+        slot.matches.forEach((m, index) => {
+            container.innerHTML += `
+                <div class="match-card">
+                    <div><strong>Feld ${index + 1}</strong></div>
+                    <div><span class="badge" style="background:${m.t1.color}"></span>${m.t1.name} vs ${m.t2.name}<span class="badge" style="background:${m.t2.color}"></span></div>
+                    <div class="match-inputs">
+                        <input type="number" id="score1-${index}" placeholder="0"> : 
+                        <input type="number" id="score2-${index}" placeholder="0">
+                    </div>
+                </div>
+            `;
+        });
+    }
+
+    function saveResults() {
+        const slot = state.timeslots[state.currentSlot];
+        slot.matches.forEach((m, index) => {
+            const s1 = parseInt(document.getElementById(`score1-${index}`).value) || 0;
+            const s2 = parseInt(document.getElementById(`score2-${index}`).value) || 0;
+            m.score1 = s1; m.score2 = s2;
+            
+            let t1 = state.teams.find(t => t.id === m.t1.id);
+            let t2 = state.teams.find(t => t.id === m.t2.id);
+            
+            t1.matchesPlayed++; t2.matchesPlayed++;
+            t1.diff += (s1 - s2); t2.diff += (s2 - s1);
+            
+            if(s1 > s2) t1.points += 3;
+            else if(s2 > s1) t2.points += 3;
+            else { t1.points += 1; t2.points += 1; }
+        });
+        
+        state.currentSlot++;
+        state.phase = 'pause';
+        state.timeRemaining = 720; // Reset auf 12 Minuten
+        updateAdminView();
+        broadcastState();
+    }
+
+    // --- TIMER & SOUND LOGIK ---
+    function startTimer() {
+        if(state.isTimerRunning) return;
+        state.phase = 'active';
+        state.isTimerRunning = true;
+        broadcastState();
+        timerInterval = setInterval(() => {
+            if(state.timeRemaining > 0) {
+                state.timeRemaining--;
+                let m = Math.floor(state.timeRemaining / 60).toString().padStart(2, '0');
+                let s = (state.timeRemaining % 60).toString().padStart(2, '0');
+                document.getElementById('time-display').innerText = `${m}:${s}`;
+                bc.postMessage({ type: 'TIMER_TICK', time: state.timeRemaining });
+            } else {
+                pauseTimer();
+                playHorn();
+            }
+        }, 1000);
+    }
+
+    function pauseTimer() {
+        state.isTimerRunning = false;
+        clearInterval(timerInterval);
+        broadcastState();
+    }
+
+    function playHorn() {
+        // Synthetische Tröte generiert 100% offline einen Ton!
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sawtooth'; // Aggressiver Sound
+        osc.frequency.setValueAtTime(150, ctx.currentTime);
+        gain.gain.setValueAtTime(1, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 1.5);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 1.5);
+        bc.postMessage({ type: 'HORN' });
+    }
+
+    function broadcastState() {
+        bc.postMessage({ type: 'STATE_UPDATE', state: state });
+    }
+</script>
+</body>
+</html>
