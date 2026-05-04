@@ -10,16 +10,66 @@
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--bg); color: var(--text); margin: 0; overflow-y: auto; overflow-x: hidden; }
         
         .view { display: none; min-height: 100vh; padding: 40px; box-sizing: border-box; }
-        .active-view { display: flex; flex-direction: column; justify-content: center; align-items: center; }
         
-        #round-title { font-size: 4vw; color: var(--primary); margin-bottom: 20px; font-weight: bold; text-transform: uppercase; letter-spacing: 2px; }
-        #timer { font-size: 25vw; font-weight: bold; line-height: 1; margin-bottom: 20px; transition: color 0.5s; color: #111; }
+        /* NEUES DESIGN FÜR DEN AKTIVEN TIMER (PHASE A) */
+        #active-phase { 
+            display: flex; 
+            flex-direction: column; 
+            justify-content: center; 
+            align-items: center; 
+            padding: 0; /* Padding entfernen für den Full-Width Banner */
+            position: relative; 
+            height: 100vh; 
+            background: var(--bg);
+        }
+        
+        #round-title { 
+            position: absolute; 
+            top: 30px; 
+            left: 40px; 
+            font-size: 2.5vw; 
+            color: #888; /* Dezenteres Grau */
+            margin: 0; 
+            font-weight: bold; 
+            text-transform: uppercase; 
+            letter-spacing: 2px; 
+        }
+        
+        #timer { 
+            font-size: 28vw; /* Gigantisch, aber passt perfekt auf den Screen */
+            font-weight: bold; 
+            line-height: 1; 
+            margin: 0; 
+            color: #111; 
+            font-variant-numeric: tabular-nums; /* Verhindert das Wackeln der Zahlen beim Countdown! */
+            transition: color 0.5s; 
+            margin-bottom: 8vh; /* Etwas Platz nach unten wegen des Banners */
+        }
+        
         .timer-yellow { color: #ffc107 !important; }
         .timer-red { color: #dc3545 !important; animation: pulse 1s infinite; }
         @keyframes pulse { 0% { opacity: 1; transform: scale(1); } 50% { opacity: 0.8; transform: scale(0.98); } 100% { opacity: 1; transform: scale(1); } }
         
-        .current-matches { font-size: 4vw; display: flex; flex-direction: column; gap: 20px; text-align: center; font-weight: bold; }
+        /* DER NEUE SPIEL-BANNER UNTEN */
+        .current-matches { 
+            position: absolute; 
+            bottom: 0; 
+            left: 0; 
+            width: 100%; 
+            background: var(--primary); /* Blaues Banner */
+            color: white; 
+            padding: 2vh 40px; 
+            box-sizing: border-box;
+            display: flex; 
+            flex-wrap: wrap; /* Falls es 4 Felder sind, bricht es sauber um */
+            justify-content: center; 
+            gap: 40px; 
+            font-size: 2.5vw; 
+            font-weight: bold; 
+            box-shadow: 0 -10px 30px rgba(0,0,0,0.15); /* Cooler Schatten nach oben */
+        }
         
+        /* PAUSE & TABELLEN ANSICHT */
         .pause-view { display: flex; flex-direction: column; gap: 40px; }
         .flex-container { display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; width: 100%; }
         
@@ -106,7 +156,6 @@
         if(stage === 'finished') {
             renderSiegerehrung();
         } else if(phase === 'pause') {
-            // Der wrapper bleibt jetzt IMMER sichtbar
             document.getElementById('groups-wrapper').style.display = 'block'; 
             
             if(stage === 'ko') {
@@ -132,8 +181,15 @@
         
         let html = '';
         slot.matches.forEach((m, i) => {
-            let info = m.koType === 'P3' ? '(Spiel um Platz 3)' : (m.koType === 'FINALE' ? '(FINALE)' : `Feld ${i+1}`);
-            html += `<div><span style="color:#666; margin-right: 15px; font-size: 0.7em; text-transform: uppercase;">${info}:</span> <span class="badge" style="background:${m.t1.color}"></span>${m.t1.name} <span style="color:#999; margin:0 10px;">vs</span> ${m.t2.name}<span class="badge" style="background:${m.t2.color}"></span></div>`;
+            let info = m.koType === 'P3' ? 'PLATZ 3' : (m.koType === 'FINALE' ? 'FINALE' : `FELD ${i+1}`);
+            
+            // Anpassung der Anzeige für den blauen Banner (Weiße Schrift, farbige Badges mit weißem Rand)
+            html += `<div style="display:flex; align-items:center;">
+                        <span style="color: rgba(255,255,255,0.7); font-size: 0.7em; margin-right: 15px;">${info}:</span> 
+                        <span class="badge" style="background:${m.t1.color}; border: 2px solid white;"></span><span>${m.t1.name}</span> 
+                        <span style="color: rgba(255,255,255,0.5); font-size: 0.8em; margin: 0 15px;">vs</span> 
+                        <span>${m.t2.name}</span><span class="badge" style="background:${m.t2.color}; border: 2px solid white; margin-left:12px; margin-right:0;"></span>
+                     </div>`;
         });
         document.getElementById('current-matches-display').innerHTML = html;
     }
@@ -142,7 +198,6 @@
         let html = '';
         
         if (currentState.stage === 'ko') {
-            // KOMPAKTE ZWEISPALTIGE GESAMTRANGLISTE FÜR DIE K.O.-PHASE
             let allTeams = [...currentState.teams].sort((a, b) => b.points - a.points || b.diff - a.diff);
             
             html += `<div class="card" style="width: 100%; max-width: 900px; margin: 0 auto; padding: 15px;">`;
@@ -157,7 +212,7 @@
             });
             html += `</table>`;
             
-            // Spalte 2 (nur wenn es genug Teams gibt)
+            // Spalte 2
             if(allTeams.length > 1) {
                 html += `<table style="font-size: 1.1em; flex: 1; min-width: 250px;"><tr><th style="width: 40px;">Pl.</th><th>Team</th><th>Pkt</th><th>Diff</th></tr>`;
                 allTeams.slice(half).forEach((t, idx) => {
@@ -169,7 +224,6 @@
             html += `</div></div>`;
             
         } else {
-            // NORMALE GRUPPEN-ANSICHT
             currentState.groups.forEach((group, i) => {
                 let sortedTeams = [...group].map(t => currentState.teams.find(st => st.id === t.id));
                 sortedTeams.sort((a, b) => b.points - a.points || b.diff - a.diff);
