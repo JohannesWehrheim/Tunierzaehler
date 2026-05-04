@@ -10,20 +10,19 @@
         .view { display: none; height: 100vh; padding: 40px; box-sizing: border-box; }
         .active-view { display: flex; flex-direction: column; justify-content: center; align-items: center; }
         
-        /* Phase A: Timer */
+        #round-title { font-size: 3vw; color: var(--primary); margin-bottom: 20px; font-weight: bold; }
         #timer { font-size: 25vw; font-weight: bold; line-height: 1; margin-bottom: 20px; transition: color 0.5s; }
         .timer-yellow { color: #ffd700; }
         .timer-red { color: #ff3366; animation: pulse 1s infinite; }
         @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.8; } 100% { opacity: 1; } }
         .current-matches { font-size: 3vw; display: flex; flex-direction: column; gap: 20px; text-align: center;}
         
-        /* Phase B: Pause */
         .pause-view { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
         h1 { color: var(--primary); font-size: 2.5em; text-align: center; margin-top: 0; }
-        .card { background: var(--surface); padding: 20px; border-radius: 12px; margin-bottom: 20px; }
+        .card { background: var(--surface); padding: 20px; border-radius: 12px; margin-bottom: 20px; overflow-y: auto; max-height: 85vh; }
         table { width: 100%; border-collapse: collapse; font-size: 1.2em; }
-        th, td { text-align: left; padding: 12px; border-bottom: 1px solid #444; }
-        th { color: var(--primary); }
+        th, td { text-align: left; padding: 10px; border-bottom: 1px solid #444; }
+        th { color: var(--primary); position: sticky; top: 0; background: var(--surface); }
         .badge { display: inline-block; width: 20px; height: 20px; border-radius: 50%; margin-right: 10px; vertical-align: middle; }
         
         #waiting-screen { display: flex; justify-content: center; align-items: center; height: 100vh; font-size: 3em; color: #555; }
@@ -33,20 +32,19 @@
 
 <div id="waiting-screen">Warte auf Turnier-Start...</div>
 
-<!-- Phase A: Spiel läuft -->
 <div id="active-phase" class="view">
+    <div id="round-title">Aktuelle Spiele</div>
     <div id="timer">12:00</div>
     <div id="current-matches-display" class="current-matches"></div>
 </div>
 
-<!-- Phase B: Pause (Tabellen & Vorschau) -->
 <div id="pause-phase" class="view pause-view">
     <div id="tables-container" class="card">
-        <h1>Tabellen</h1>
+        <h1>Tabellen (Gruppenphase)</h1>
         <div id="tables-content"></div>
     </div>
     <div id="schedule-container" class="card">
-        <h1>Nächste Spiele</h1>
+        <h1>Spielplan</h1>
         <div id="schedule-content"></div>
     </div>
 </div>
@@ -56,12 +54,86 @@
     let currentState = null;
 
     bc.onmessage = (event) => {
-        if(event.data.type === 'STATE_UPDATE') {
-            currentState = event.data.state;
-            render();
+        if(event.data.type === 'STATE_UPDATE') { currentState = event.data.state; render(); }
+        if(event.data.type === 'TIMER_TICK') updateTimerDisplay(event.data.time);
+        if(event.data.type === 'HORN') { document.body.style.backgroundColor = "#ff3366"; setTimeout(() => document.body.style.backgroundColor = "var(--bg)", 1000); }
+    };
+
+    function updateTimerDisplay(seconds) {
+        let m = Math.floor(seconds / 60).toString().padStart(2, '0');
+        let s = (seconds % 60).toString().padStart(2, '0');
+        const timerEl = document.getElementById('timer');
+        timerEl.innerText = `${m}:${s}`;
+        timerEl.className = '';
+        if(seconds <= 60) timerEl.classList.add('timer-red');
+        else if(seconds <= 300) timerEl.classList.add('timer-yellow');
+    }
+
+    function render() {
+        document.getElementById('waiting-screen').style.display = 'none';
+        const isPause = currentState.phase === 'pause';
+        document.getElementById('active-phase').style.display = isPause ? 'none' : 'flex';
+        document.getElementById('pause-phase').style.display = isPause ? 'grid' : 'none';
+
+        if(isPause) { renderTables(); renderSchedule(); } 
+        else { renderActiveMatches(); updateTimerDisplay(currentState.timeRemaining); }
+    }
+
+    function renderActiveMatches() {
+        if(currentState.currentSlot >= currentState.timeslots.length) return;
+        const slot = currentState.timeslots[currentState.currentSlot];
+        
+        // Zeige den K.O. Runden-Namen an, falls vorhanden
+        document.getElementById('round-title').innerText = slot.name ? slot.name : `Runde ${currentState.currentSlot + 1}`;
+        
+        let html = '';
+        slot.matches.forEach((m, i) => {
+            html += `<div><strong>Feld ${i+1}:</strong> <span class="badge" style="background:${m.t1.color}"></span>${m.t1.name} vs ${m.t2.name}<span class="badge" style="background:${m.t2.color}"></span></div>`;
+        });
+        document.getElementById('current-matches-display').innerHTML = html;
+    }
+
+    function renderTables() {
+        let html = '';
+        currentState.groups.forEach((group, i) => {
+            let sortedTeams = [...group].map(t => currentState.teams.find(st => st.id === t.id));
+            sortedTeams.sort((a, b) => b.points - a.points || b.diff - a.diff);
+            
+            html += `<h3>Gruppe ${String.fromCharCode(65 + i)}</h3><table><tr><th>Team</th><th>Pkt</th><th>Diff</th></tr>`;
+            sortedTeams.forEach(t => {
+                html += `<tr><td><span class="badge" style="background:${t.color}"></span>${t.name}</td><td>${t.points}</td><td>${t.diff > 0 ? '+'+t.diff : t.diff}</td></tr>`;
+            });
+            html += `</table>`;
+        });
+        document.getElementById('tables-content').innerHTML = html;
+    }
+
+    function renderSchedule() {
+        let html = '';
+        const start = currentState.currentSlot;
+        for(let offset = 0; offset < 2; offset++) {
+            const slotIdx = start + offset;
+            if(slotIdx < currentState.timeslots.length) {
+                const slot = currentState.timeslots[slotIdx];
+                const title = slot.name ? slot.name : `Runde ${slotIdx + 1}`;
+                
+                html += `<h3>${offset === 0 ? 'Als Nächstes' : 'Danach'} (${title})</h3><table style="font-size:1em;">`;
+                slot.matches.forEach((m, i) => {
+                    html += `<tr><td>Feld ${i+1}</td><td><span class="badge" style="background:${m.t1.color}"></span>${m.t1.name} vs ${m.t2.name}<span class="badge" style="background:${m.t2.color}"></span></td></tr>`;
+                });
+                html += `</table>`;
+            }
         }
-        if(event.data.type === 'TIMER_TICK') {
-            updateTimerDisplay(event.data.time);
+        
+        // Wenn keine Spiele mehr da sind, K.O. Phase Ankündigung anzeigen
+        if(html === '' && currentState.currentSlot >= currentState.timeslots.length) {
+            html = '<h3 style="color: var(--primary);">Vorrunde beendet! K.O.-Spiele werden ermittelt...</h3>';
+        }
+        document.getElementById('schedule-content').innerHTML = html;
+    }
+</script>
+</body>
+</html>            updateTimerDisplay(event.data.time);
         }
         if(event.data.type === 'HORN') {
             document.body.style.backgroundColor = "#ff3366";
