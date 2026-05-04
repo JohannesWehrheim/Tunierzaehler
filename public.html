@@ -58,7 +58,7 @@
 
 <div id="pause-phase" class="view pause-view">
     <div id="groups-wrapper">
-        <h1 class="section-title">Gruppenphase</h1>
+        <h1 class="section-title" id="table-section-title">Gruppenphase</h1>
         <div id="tables-content" class="flex-container" style="margin-top: 20px;"></div>
     </div>
     
@@ -96,8 +96,8 @@
     function render() {
         document.getElementById('waiting-screen').style.display = 'none';
         
-        const phase = currentState.phase; // 'pause' oder 'active'
-        const stage = currentState.stage; // 'groups', 'ko', 'finished'
+        const phase = currentState.phase; 
+        const stage = currentState.stage; 
 
         document.getElementById('active-phase').style.display = (phase === 'active' && stage !== 'finished') ? 'flex' : 'none';
         document.getElementById('pause-phase').style.display = (phase === 'pause' && stage !== 'finished') ? 'flex' : 'none';
@@ -106,14 +106,17 @@
         if(stage === 'finished') {
             renderSiegerehrung();
         } else if(phase === 'pause') {
+            // Der wrapper bleibt jetzt IMMER sichtbar
+            document.getElementById('groups-wrapper').style.display = 'block'; 
+            
             if(stage === 'ko') {
-                document.getElementById('groups-wrapper').style.display = 'none'; // Tabellen in der KO Phase verstecken!
+                document.getElementById('table-section-title').innerText = "Aktuelle Gesamtrangliste";
                 document.getElementById('schedule-title').innerText = "K.O. Runden";
             } else {
-                document.getElementById('groups-wrapper').style.display = 'block';
+                document.getElementById('table-section-title').innerText = "Gruppenphase";
                 document.getElementById('schedule-title').innerText = "Spielplan";
-                renderTables();
             }
+            renderTables();
             renderSchedule();
         } else {
             renderActiveMatches();
@@ -137,16 +140,48 @@
 
     function renderTables() {
         let html = '';
-        currentState.groups.forEach((group, i) => {
-            let sortedTeams = [...group].map(t => currentState.teams.find(st => st.id === t.id));
-            sortedTeams.sort((a, b) => b.points - a.points || b.diff - a.diff);
+        
+        if (currentState.stage === 'ko') {
+            // KOMPAKTE ZWEISPALTIGE GESAMTRANGLISTE FÜR DIE K.O.-PHASE
+            let allTeams = [...currentState.teams].sort((a, b) => b.points - a.points || b.diff - a.diff);
             
-            html += `<div class="card"><h3>Gruppe ${String.fromCharCode(65 + i)}</h3><table><tr><th>Team</th><th>Pkt</th><th>Diff</th></tr>`;
-            sortedTeams.forEach((t, idx) => {
-                html += `<tr><td><strong style="color:#999; margin-right:10px;">${idx+1}.</strong><span class="badge" style="background:${t.color}"></span><strong>${t.name}</strong></td><td><strong>${t.points}</strong></td><td>${t.diff > 0 ? '+'+t.diff : t.diff}</td></tr>`;
+            html += `<div class="card" style="width: 100%; max-width: 900px; margin: 0 auto; padding: 15px;">`;
+            html += `<div style="display: flex; gap: 40px; flex-wrap: wrap;">`;
+            
+            let half = Math.ceil(allTeams.length / 2);
+            
+            // Spalte 1
+            html += `<table style="font-size: 1.1em; flex: 1; min-width: 250px;"><tr><th style="width: 40px;">Pl.</th><th>Team</th><th>Pkt</th><th>Diff</th></tr>`;
+            allTeams.slice(0, half).forEach((t, idx) => {
+                html += `<tr><td style="color:#999; font-weight:bold;">${idx+1}.</td><td><span class="badge" style="background:${t.color}"></span><strong>${t.name}</strong></td><td><strong>${t.points}</strong></td><td>${t.diff > 0 ? '+'+t.diff : t.diff}</td></tr>`;
             });
-            html += `</table></div>`;
-        });
+            html += `</table>`;
+            
+            // Spalte 2 (nur wenn es genug Teams gibt)
+            if(allTeams.length > 1) {
+                html += `<table style="font-size: 1.1em; flex: 1; min-width: 250px;"><tr><th style="width: 40px;">Pl.</th><th>Team</th><th>Pkt</th><th>Diff</th></tr>`;
+                allTeams.slice(half).forEach((t, idx) => {
+                    html += `<tr><td style="color:#999; font-weight:bold;">${half + idx + 1}.</td><td><span class="badge" style="background:${t.color}"></span><strong>${t.name}</strong></td><td><strong>${t.points}</strong></td><td>${t.diff > 0 ? '+'+t.diff : t.diff}</td></tr>`;
+                });
+                html += `</table>`;
+            }
+            
+            html += `</div></div>`;
+            
+        } else {
+            // NORMALE GRUPPEN-ANSICHT
+            currentState.groups.forEach((group, i) => {
+                let sortedTeams = [...group].map(t => currentState.teams.find(st => st.id === t.id));
+                sortedTeams.sort((a, b) => b.points - a.points || b.diff - a.diff);
+                
+                html += `<div class="card"><h3>Gruppe ${String.fromCharCode(65 + i)}</h3><table><tr><th>Team</th><th>Pkt</th><th>Diff</th></tr>`;
+                sortedTeams.forEach((t, idx) => {
+                    html += `<tr><td><strong style="color:#999; margin-right:10px;">${idx+1}.</strong><span class="badge" style="background:${t.color}"></span><strong>${t.name}</strong></td><td><strong>${t.points}</strong></td><td>${t.diff > 0 ? '+'+t.diff : t.diff}</td></tr>`;
+                });
+                html += `</table></div>`;
+            });
+        }
+        
         document.getElementById('tables-content').innerHTML = html;
     }
 
@@ -159,7 +194,6 @@
                 const slot = currentState.timeslots[slotIdx];
                 const title = slot.name ? slot.name : `Runde ${slotIdx + 1}`;
                 
-                // In der KO Phase machen wir die Karten etwas größer
                 let cardStyle = currentState.stage === 'ko' ? 'max-width: 800px; width: 100%;' : '';
                 
                 html += `<div class="card" style="${cardStyle}"><h3>${offset === 0 ? 'Als Nächstes' : 'Danach'} (${title})</h3><table>`;
