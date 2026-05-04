@@ -253,6 +253,19 @@
         renderHistory();
     }
 
+    // HELPER: Sucht sicher alle Matches einer vorherigen K.O. Runde zusammen (auch wenn sie über mehrere Slots verteilt waren)
+    function getMatchesByType(koTypeToFind) {
+        let foundMatches = [];
+        for (let i = state.timeslots.length - 1; i >= 0; i--) {
+            if (state.timeslots[i].matches.length > 0 && state.timeslots[i].matches[0].koType === koTypeToFind) {
+                foundMatches.unshift(...state.timeslots[i].matches);
+            } else if (foundMatches.length > 0) {
+                break; // Wir haben den Block gefunden und sind jetzt daran vorbei, suche beenden.
+            }
+        }
+        return foundMatches;
+    }
+
     function generateAutoKO(type) {
         state.stage = 'ko'; let rank = getOverallRanking(); let matches = []; let name = "";
 
@@ -267,16 +280,31 @@
             matches.push({t1: rank[0], t2: rank[3], score1: null, score2: null, isKO: true, koType: 'HF'});
             matches.push({t1: rank[1], t2: rank[2], score1: null, score2: null, isKO: true, koType: 'HF'});
         } else if (type === 'HF_ko') {
-            name = "Halbfinale"; let vfMatches = state.timeslots[state.currentSlot - 1].matches;
+            name = "Halbfinale"; 
+            let vfMatches = getMatchesByType('VF');
             let winners = vfMatches.map(m => m.score1 > m.score2 ? m.t1 : m.t2);
-            matches.push({t1: winners[0], t2: winners[3] || winners[1], score1: null, score2: null, isKO: true, koType: 'HF'});
-            if(winners.length > 2) matches.push({t1: winners[1], t2: winners[2], score1: null, score2: null, isKO: true, koType: 'HF'});
+            
+            if(winners.length >= 4) {
+                matches.push({t1: winners[0], t2: winners[3], score1: null, score2: null, isKO: true, koType: 'HF'});
+                matches.push({t1: winners[1], t2: winners[2], score1: null, score2: null, isKO: true, koType: 'HF'});
+            } else {
+                matches.push({t1: winners[0], t2: winners[1], score1: null, score2: null, isKO: true, koType: 'HF'});
+            }
         } else if (type === 'FINALE') {
-            name = "Finale & Platz 3"; let hfMatches = state.timeslots[state.currentSlot - 1].matches;
-            let w1 = hfMatches[0].score1 > hfMatches[0].score2 ? hfMatches[0].t1 : hfMatches[0].t2; let w2 = hfMatches[1].score1 > hfMatches[1].score2 ? hfMatches[1].t1 : hfMatches[1].t2;
-            let l1 = hfMatches[0].score1 < hfMatches[0].score2 ? hfMatches[0].t1 : hfMatches[0].t2; let l2 = hfMatches[1].score1 < hfMatches[1].score2 ? hfMatches[1].t1 : hfMatches[1].t2;
-            matches.push({t1: l1, t2: l2, score1: null, score2: null, isKO: true, koType: 'P3'});
-            matches.push({t1: w1, t2: w2, score1: null, score2: null, isKO: true, koType: 'FINALE'});
+            name = "Finale & Platz 3"; 
+            let hfMatches = getMatchesByType('HF');
+            
+            if (hfMatches.length >= 2) {
+                let w1 = hfMatches[0].score1 > hfMatches[0].score2 ? hfMatches[0].t1 : hfMatches[0].t2; 
+                let w2 = hfMatches[1].score1 > hfMatches[1].score2 ? hfMatches[1].t1 : hfMatches[1].t2;
+                let l1 = hfMatches[0].score1 < hfMatches[0].score2 ? hfMatches[0].t1 : hfMatches[0].t2; 
+                let l2 = hfMatches[1].score1 < hfMatches[1].score2 ? hfMatches[1].t1 : hfMatches[1].t2;
+                matches.push({t1: l1, t2: l2, score1: null, score2: null, isKO: true, koType: 'P3'});
+                matches.push({t1: w1, t2: w2, score1: null, score2: null, isKO: true, koType: 'FINALE'});
+            } else {
+                alert("Fehler: Konnte nicht alle Halbfinalspiele finden!");
+                return;
+            }
         }
 
         let tempSlots = [];
@@ -291,7 +319,14 @@
 
     function endTournament() {
         state.stage = 'finished';
-        let finalMatches = state.timeslots[state.currentSlot - 1].matches;
+        
+        let finalMatches = [];
+        for (let i = state.timeslots.length - 1; i >= 0; i--) {
+            if (state.timeslots[i].matches[0].koType === 'FINALE' || state.timeslots[i].matches[0].koType === 'P3') {
+                finalMatches.unshift(...state.timeslots[i].matches);
+            } else if (finalMatches.length > 0) break;
+        }
+
         let finaleMatch = finalMatches.find(m => m.koType === 'FINALE'); let p3Match = finalMatches.find(m => m.koType === 'P3');
         let rank = getOverallRanking(); let top4 = [];
         
@@ -306,21 +341,18 @@
         localStorage.setItem('tourney_state', JSON.stringify(state)); updateAdminView(); broadcastState();
     }
 
-    // --- DIE NEUE, INTELLIGENTE ZURÜCK-LOGIK ---
     function undoLastRound() {
         if (state.currentSlot === 0 && state.currentSlot === state.timeslots.length) return;
         if (state.stage === 'finished') state.stage = 'ko';
 
         let isNewKOGeneration = false;
         
-        // Prüfen, ob wir gerade K.O. Spiele generiert, aber noch NICHT gespielt haben
         if (state.currentSlot < state.timeslots.length && state.timeslots[state.currentSlot].matches[0].isKO) {
             if (state.currentSlot === 0) {
                 isNewKOGeneration = true;
             } else {
                 let prevMatch = state.timeslots[state.currentSlot - 1].matches[0];
                 let currMatch = state.timeslots[state.currentSlot].matches[0];
-                // Wenn das vorherige Spiel KEIN K.O. war oder ein anderer K.O. Typ (z.B. HF statt VF)
                 if (!prevMatch.isKO || prevMatch.koType !== currMatch.koType) {
                     isNewKOGeneration = true;
                 }
@@ -328,15 +360,11 @@
         }
 
         if (isNewKOGeneration) {
-            // Generierung widerrufen: Lösche alle ungespielten K.O. Runden dieses Typs
             state.timeslots.splice(state.currentSlot);
-            
-            // Setze den Status zurück auf Gruppenphase, falls nötig
             if (state.currentSlot > 0 && !state.timeslots[state.currentSlot - 1].matches[0].isKO) {
                 state.stage = 'groups';
             }
         } else {
-            // Reguläres Undo: Gehe einen Slot zurück und lösche die Punkte
             state.currentSlot--;
             const slot = state.timeslots[state.currentSlot];
             
