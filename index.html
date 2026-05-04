@@ -92,7 +92,7 @@
     
     <button id="save-btn" onclick="saveResults()" style="width: 100%; margin-top: 20px; padding: 15px; font-size: 1.1em;" class="btn-green">Ergebnisse speichern & Weiter</button>
     
-    <button id="undo-btn" onclick="undoLastRound()" class="btn-red" style="width: 100%; margin-top: 10px; display: none;">Rückgängig (Letzte Runde bearbeiten)</button>
+    <button id="undo-btn" onclick="undoLastRound()" class="btn-red" style="width: 100%; margin-top: 10px; display: none;">Rückgängig (Fehler korrigieren)</button>
 
     <h3 style="margin-top: 40px; color: #666; text-align: left;">Historie</h3>
     <div id="match-history" class="scroll-box"></div>
@@ -181,7 +181,6 @@
         
         if(state.currentSlot > 0) undoBtn.style.display = 'block'; else undoBtn.style.display = 'none';
 
-        // Turnier ist komplett beendet
         if(state.stage === 'finished') {
             roundHeader.innerHTML = "Turnier beendet! 🏆";
             saveBtn.style.display = 'none'; undoBtn.style.display = 'block';
@@ -189,21 +188,18 @@
             renderHistory(); return;
         }
 
-        // K.O. Phase Generierung (Wenn alle Matches gespielt wurden)
         if(state.currentSlot >= state.timeslots.length) {
             roundHeader.innerHTML = "Zwischenphase: Spiele generieren";
             saveBtn.style.display = 'none';
             
             let html = `<div class="ko-builder-box">`;
-            
-            // Checken, ob wir gerade aus der Gruppenphase oder aus dem HF kommen
             let lastSlot = state.currentSlot > 0 ? state.timeslots[state.currentSlot - 1] : null;
             let justFinishedGroups = state.stage === 'groups';
             let justFinishedHF = lastSlot && lastSlot.matches[0].koType === 'HF';
             let justFinishedFinale = lastSlot && (lastSlot.matches[0].koType === 'FINALE' || lastSlot.matches[0].koType === 'P3');
 
             if(justFinishedGroups) {
-                html += `<h3 style="margin-top:0; color:var(--primary);">Gruppenphase beendet!</h3><p>Automatische K.O.-Runden (Berechnet nach Tabellenplatz):</p>`;
+                html += `<h3 style="margin-top:0; color:var(--primary);">Gruppenphase beendet!</h3><p>Automatische K.O.-Runden (Nach Tabellenplatz):</p>`;
                 if(state.teams.length >= 8) html += `<button onclick="generateAutoKO('VF')" class="btn-green" style="width:100%;">Viertelfinale (Top 8) starten</button>`;
                 html += `<button onclick="generateAutoKO('HF_groups')" class="btn-green" style="width:100%; margin-top:10px;">Halbfinale (Top 4) starten</button>`;
             } 
@@ -216,12 +212,10 @@
                 html += `<button onclick="endTournament()" class="btn-green" style="width:100%; font-size: 1.2em; padding: 15px;">Siegerehrung starten 🏆</button>`;
             }
             else {
-                // Generischer Fall (z.B. nach Viertelfinale)
                 html += `<h3 style="margin-top:0; color:var(--primary);">Runde beendet!</h3>`;
-                html += `<button onclick="generateAutoKO('HF_ko')" class="btn-green" style="width:100%;">Halbfinale starten (Sieger aus letzter Runde)</button>`;
+                html += `<button onclick="generateAutoKO('HF_ko')" class="btn-green" style="width:100%;">Halbfinale starten (Sieger letzte Runde)</button>`;
             }
 
-            // Manuelles Fallback (Eingeklappt)
             if(!justFinishedFinale) {
                 html += `<hr style="margin: 20px 0; border: 0; border-top: 1px solid var(--border);">
                          <h4 style="margin:0 0 10px 0;">Manuelles Spiel (Notfall-Modus)</h4>
@@ -236,7 +230,6 @@
             renderHistory(); return;
         }
 
-        // Aktuelle Spiele Ansicht
         saveBtn.style.display = 'block';
         const slot = state.timeslots[state.currentSlot];
         roundHeader.innerHTML = slot.name ? `Aktuelle Spiele: ${slot.name}` : `Aktuelle Spiele (Runde ${state.currentSlot + 1})`;
@@ -260,12 +253,8 @@
         renderHistory();
     }
 
-    // --- AUTOMATIK K.O. LOGIK ---
     function generateAutoKO(type) {
-        state.stage = 'ko';
-        let rank = getOverallRanking();
-        let matches = [];
-        let name = "";
+        state.stage = 'ko'; let rank = getOverallRanking(); let matches = []; let name = "";
 
         if(type === 'VF') {
             name = "Viertelfinale";
@@ -278,29 +267,22 @@
             matches.push({t1: rank[0], t2: rank[3], score1: null, score2: null, isKO: true, koType: 'HF'});
             matches.push({t1: rank[1], t2: rank[2], score1: null, score2: null, isKO: true, koType: 'HF'});
         } else if (type === 'HF_ko') {
-            name = "Halbfinale";
-            let vfMatches = state.timeslots[state.currentSlot - 1].matches;
+            name = "Halbfinale"; let vfMatches = state.timeslots[state.currentSlot - 1].matches;
             let winners = vfMatches.map(m => m.score1 > m.score2 ? m.t1 : m.t2);
             matches.push({t1: winners[0], t2: winners[3] || winners[1], score1: null, score2: null, isKO: true, koType: 'HF'});
             if(winners.length > 2) matches.push({t1: winners[1], t2: winners[2], score1: null, score2: null, isKO: true, koType: 'HF'});
         } else if (type === 'FINALE') {
-            name = "Finale & Platz 3";
-            let hfMatches = state.timeslots[state.currentSlot - 1].matches;
-            let w1 = hfMatches[0].score1 > hfMatches[0].score2 ? hfMatches[0].t1 : hfMatches[0].t2;
-            let w2 = hfMatches[1].score1 > hfMatches[1].score2 ? hfMatches[1].t1 : hfMatches[1].t2;
-            let l1 = hfMatches[0].score1 < hfMatches[0].score2 ? hfMatches[0].t1 : hfMatches[0].t2;
-            let l2 = hfMatches[1].score1 < hfMatches[1].score2 ? hfMatches[1].t1 : hfMatches[1].t2;
-            matches.push({t1: l1, t2: l2, score1: null, score2: null, isKO: true, koType: 'P3'}); // Feld 1 = P3
-            matches.push({t1: w1, t2: w2, score1: null, score2: null, isKO: true, koType: 'FINALE'}); // Feld 2 = Finale
+            name = "Finale & Platz 3"; let hfMatches = state.timeslots[state.currentSlot - 1].matches;
+            let w1 = hfMatches[0].score1 > hfMatches[0].score2 ? hfMatches[0].t1 : hfMatches[0].t2; let w2 = hfMatches[1].score1 > hfMatches[1].score2 ? hfMatches[1].t1 : hfMatches[1].t2;
+            let l1 = hfMatches[0].score1 < hfMatches[0].score2 ? hfMatches[0].t1 : hfMatches[0].t2; let l2 = hfMatches[1].score1 < hfMatches[1].score2 ? hfMatches[1].t1 : hfMatches[1].t2;
+            matches.push({t1: l1, t2: l2, score1: null, score2: null, isKO: true, koType: 'P3'});
+            matches.push({t1: w1, t2: w2, score1: null, score2: null, isKO: true, koType: 'FINALE'});
         }
 
-        // Auf Felder aufteilen
         let tempSlots = [];
         for (let match of matches) {
             let placed = false;
-            for (let slot of tempSlots) {
-                if (slot.matches.length < state.numFields) { slot.matches.push(match); placed = true; break; }
-            }
+            for (let slot of tempSlots) { if (slot.matches.length < state.numFields) { slot.matches.push(match); placed = true; break; } }
             if (!placed) tempSlots.push({ name: name, matches: [match] });
         }
         state.timeslots.push(...tempSlots);
@@ -310,49 +292,68 @@
     function endTournament() {
         state.stage = 'finished';
         let finalMatches = state.timeslots[state.currentSlot - 1].matches;
-        let finaleMatch = finalMatches.find(m => m.koType === 'FINALE');
-        let p3Match = finalMatches.find(m => m.koType === 'P3');
-        
-        let rank = getOverallRanking();
-        let top4 = [];
+        let finaleMatch = finalMatches.find(m => m.koType === 'FINALE'); let p3Match = finalMatches.find(m => m.koType === 'P3');
+        let rank = getOverallRanking(); let top4 = [];
         
         if(finaleMatch && p3Match) {
-            let first = finaleMatch.score1 > finaleMatch.score2 ? finaleMatch.t1 : finaleMatch.t2;
-            let second = finaleMatch.score1 < finaleMatch.score2 ? finaleMatch.t1 : finaleMatch.t2;
-            let third = p3Match.score1 > p3Match.score2 ? p3Match.t1 : p3Match.t2;
-            let fourth = p3Match.score1 < p3Match.score2 ? p3Match.t1 : p3Match.t2;
+            let first = finaleMatch.score1 > finaleMatch.score2 ? finaleMatch.t1 : finaleMatch.t2; let second = finaleMatch.score1 < finaleMatch.score2 ? finaleMatch.t1 : finaleMatch.t2;
+            let third = p3Match.score1 > p3Match.score2 ? p3Match.t1 : p3Match.t2; let fourth = p3Match.score1 < p3Match.score2 ? p3Match.t1 : p3Match.t2;
             top4 = [first, second, third, fourth];
         }
         
         let rest = rank.filter(t => !top4.map(topT => topT.id).includes(t.id));
         state.finalRankings = [...top4, ...rest];
-        
         localStorage.setItem('tourney_state', JSON.stringify(state)); updateAdminView(); broadcastState();
     }
 
+    // --- DIE NEUE, INTELLIGENTE ZURÜCK-LOGIK ---
     function undoLastRound() {
-        if (state.currentSlot === 0) return;
-        if (state.stage === 'finished') state.stage = 'ko'; // Falls wir vom End-Screen zurückgehen
+        if (state.currentSlot === 0 && state.currentSlot === state.timeslots.length) return;
+        if (state.stage === 'finished') state.stage = 'ko';
 
-        state.currentSlot--;
-        const slot = state.timeslots[state.currentSlot];
+        let isNewKOGeneration = false;
         
-        // Wenn es ein generierter KO Slot war, verwerfen wir ihn ganz
-        if(slot.matches[0].isKO && slot.matches[0].score1 === null) {
-            state.timeslots.pop();
-            // Prüfen ob wir zurück in die Gruppenphase fallen
-            if(state.currentSlot > 0 && !state.timeslots[state.currentSlot-1].matches[0].isKO) state.stage = 'groups';
+        // Prüfen, ob wir gerade K.O. Spiele generiert, aber noch NICHT gespielt haben
+        if (state.currentSlot < state.timeslots.length && state.timeslots[state.currentSlot].matches[0].isKO) {
+            if (state.currentSlot === 0) {
+                isNewKOGeneration = true;
+            } else {
+                let prevMatch = state.timeslots[state.currentSlot - 1].matches[0];
+                let currMatch = state.timeslots[state.currentSlot].matches[0];
+                // Wenn das vorherige Spiel KEIN K.O. war oder ein anderer K.O. Typ (z.B. HF statt VF)
+                if (!prevMatch.isKO || prevMatch.koType !== currMatch.koType) {
+                    isNewKOGeneration = true;
+                }
+            }
+        }
+
+        if (isNewKOGeneration) {
+            // Generierung widerrufen: Lösche alle ungespielten K.O. Runden dieses Typs
+            state.timeslots.splice(state.currentSlot);
+            
+            // Setze den Status zurück auf Gruppenphase, falls nötig
+            if (state.currentSlot > 0 && !state.timeslots[state.currentSlot - 1].matches[0].isKO) {
+                state.stage = 'groups';
+            }
         } else {
+            // Reguläres Undo: Gehe einen Slot zurück und lösche die Punkte
+            state.currentSlot--;
+            const slot = state.timeslots[state.currentSlot];
+            
             slot.matches.forEach(m => {
                 if (!m.isKO && m.score1 !== null && m.score2 !== null) {
                     let t1 = state.teams.find(t => t.id === m.t1.id); let t2 = state.teams.find(t => t.id === m.t2.id);
-                    t1.matchesPlayed--; t2.matchesPlayed--; t1.diff -= (m.score1 - m.score2); t2.diff -= (m.score2 - m.score1);
+                    t1.matchesPlayed--; t2.matchesPlayed--;
+                    t1.diff -= (m.score1 - m.score2); t2.diff -= (m.score2 - m.score1);
                     if(m.score1 > m.score2) t1.points -= 3; else if(m.score2 > m.score1) t2.points -= 3; else { t1.points -= 1; t2.points -= 1; }
                 }
                 m.score1 = null; m.score2 = null;
             });
         }
-        state.phase = 'pause'; localStorage.setItem('tourney_state', JSON.stringify(state)); updateAdminView(); broadcastState();
+
+        state.phase = 'pause';
+        localStorage.setItem('tourney_state', JSON.stringify(state));
+        updateAdminView(); broadcastState();
     }
 
     function addKOMatchRow() {
@@ -363,15 +364,14 @@
     }
 
     function generateManualKO() {
-        state.stage = 'ko';
-        let name = document.getElementById('ko-round-name').value || 'Entscheidungsspiel';
+        state.stage = 'ko'; let name = document.getElementById('ko-round-name').value || 'Entscheidungsspiel';
         let t1s = document.querySelectorAll('.ko-t1'); let t2s = document.querySelectorAll('.ko-t2'); let newMatches = [];
         for(let i = 0; i < t1s.length; i++) {
             let id1 = parseInt(t1s[i].value); let id2 = parseInt(t2s[i].value);
             if(id1 !== id2) newMatches.push({ t1: state.teams.find(t => t.id === id1), t2: state.teams.find(t => t.id === id2), score1: null, score2: null, isKO: true, koType: 'MANUAL' });
         }
         if(newMatches.length === 0) return alert("Ungültige Paarung!");
-        state.timeslots.push({ name: name, matches: newMatches }); // Simplifiziert für Notfall
+        state.timeslots.push({ name: name, matches: newMatches }); 
         localStorage.setItem('tourney_state', JSON.stringify(state)); updateAdminView(); broadcastState();
     }
 
