@@ -5,27 +5,45 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Turnier Display</title>
     <style>
-        :root { --bg: #0f0f16; --surface: #1e1e2f; --primary: #00d2ff; --text: #fff; }
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--bg); color: var(--text); margin: 0; overflow: hidden; }
-        .view { display: none; height: 100vh; padding: 40px; box-sizing: border-box; }
+        /* HELLES, SPORTLICHES DESIGN FÜR DRAUSSEN */
+        :root { --bg: #e9ecef; --surface: #ffffff; --primary: #0056b3; --text: #222222; --border: #dee2e6; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--bg); color: var(--text); margin: 0; overflow-y: auto; overflow-x: hidden; }
+        
+        .view { display: none; min-height: 100vh; padding: 40px; box-sizing: border-box; }
         .active-view { display: flex; flex-direction: column; justify-content: center; align-items: center; }
         
-        #round-title { font-size: 3vw; color: var(--primary); margin-bottom: 20px; font-weight: bold; }
-        #timer { font-size: 25vw; font-weight: bold; line-height: 1; margin-bottom: 20px; transition: color 0.5s; }
-        .timer-yellow { color: #ffd700; }
-        .timer-red { color: #ff3366; animation: pulse 1s infinite; }
-        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.8; } 100% { opacity: 1; } }
-        .current-matches { font-size: 3vw; display: flex; flex-direction: column; gap: 20px; text-align: center;}
+        #round-title { font-size: 4vw; color: var(--primary); margin-bottom: 20px; font-weight: bold; text-transform: uppercase; letter-spacing: 2px; }
+        #timer { font-size: 25vw; font-weight: bold; line-height: 1; margin-bottom: 20px; transition: color 0.5s; color: #111; }
+        .timer-yellow { color: #ffc107 !important; }
+        .timer-red { color: #dc3545 !important; animation: pulse 1s infinite; }
+        @keyframes pulse { 0% { opacity: 1; transform: scale(1); } 50% { opacity: 0.8; transform: scale(0.98); } 100% { opacity: 1; transform: scale(1); } }
         
-        .pause-view { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
-        h1 { color: var(--primary); font-size: 2.5em; text-align: center; margin-top: 0; }
-        .card { background: var(--surface); padding: 20px; border-radius: 12px; margin-bottom: 20px; overflow-y: auto; max-height: 85vh; }
-        table { width: 100%; border-collapse: collapse; font-size: 1.2em; }
-        th, td { text-align: left; padding: 10px; border-bottom: 1px solid #444; }
-        th { color: var(--primary); position: sticky; top: 0; background: var(--surface); }
-        .badge { display: inline-block; width: 20px; height: 20px; border-radius: 50%; margin-right: 10px; vertical-align: middle; }
+        .current-matches { font-size: 4vw; display: flex; flex-direction: column; gap: 20px; text-align: center; font-weight: bold; }
         
-        #waiting-screen { display: flex; justify-content: center; align-items: center; height: 100vh; font-size: 3em; color: #555; }
+        .pause-view { display: flex; flex-direction: column; gap: 40px; }
+        .flex-container { display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; width: 100%; }
+        
+        .section-title { width: 100%; text-align: center; color: var(--primary); font-size: 2.5em; margin: 0; text-transform: uppercase; border-bottom: 3px solid var(--border); padding-bottom: 10px; }
+        
+        .card { background: var(--surface); padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); flex: 1; min-width: 300px; max-width: 500px; border: 1px solid var(--border); }
+        .card h3 { color: var(--primary); margin-top: 0; text-align: center; font-size: 1.5em; }
+        
+        table { width: 100%; border-collapse: collapse; font-size: 1.3em; }
+        th, td { text-align: left; padding: 12px; border-bottom: 1px solid var(--border); }
+        th { color: #666; font-size: 0.9em; text-transform: uppercase; }
+        tr:last-child td { border-bottom: none; }
+        
+        .badge { display: inline-block; width: 20px; height: 20px; border-radius: 50%; margin-right: 12px; vertical-align: middle; border: 2px solid rgba(0,0,0,0.1); }
+        
+        /* Finale Rangliste Styling */
+        .rank-list { list-style: none; padding: 0; margin: 0 auto; max-width: 800px; }
+        .rank-item { background: var(--surface); margin-bottom: 15px; padding: 20px; border-radius: 12px; display: flex; align-items: center; font-size: 1.8em; font-weight: bold; border: 1px solid var(--border); box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+        .rank-1 { border-left: 10px solid #FFD700; background: #fffdf0; }
+        .rank-2 { border-left: 10px solid #C0C0C0; background: #f8f9fa; }
+        .rank-3 { border-left: 10px solid #CD7F32; background: #fffaf0; }
+        .medal { font-size: 1.5em; margin-right: 15px; width: 40px; text-align: center; }
+        
+        #waiting-screen { display: flex; justify-content: center; align-items: center; height: 100vh; font-size: 3em; color: #666; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -39,14 +57,20 @@
 </div>
 
 <div id="pause-phase" class="view pause-view">
-    <div id="tables-container" class="card">
-        <h1>Tabellen (Gruppenphase)</h1>
-        <div id="tables-content"></div>
+    <div id="groups-wrapper">
+        <h1 class="section-title">Gruppenphase</h1>
+        <div id="tables-content" class="flex-container" style="margin-top: 20px;"></div>
     </div>
-    <div id="schedule-container" class="card">
-        <h1>Spielplan</h1>
-        <div id="schedule-content"></div>
+    
+    <div style="margin-top: 20px;">
+        <h1 class="section-title" id="schedule-title">Spielplan</h1>
+        <div id="schedule-content" class="flex-container" style="margin-top: 20px;"></div>
     </div>
+</div>
+
+<div id="finished-phase" class="view">
+    <h1 style="font-size: 4em; color: var(--primary); text-align: center; margin-bottom: 40px;">🏆 Turnier Ergebnis</h1>
+    <ul class="rank-list" id="final-ranking-list"></ul>
 </div>
 
 <script>
@@ -56,7 +80,7 @@
     bc.onmessage = (event) => {
         if(event.data.type === 'STATE_UPDATE') { currentState = event.data.state; render(); }
         if(event.data.type === 'TIMER_TICK') updateTimerDisplay(event.data.time);
-        if(event.data.type === 'HORN') { document.body.style.backgroundColor = "#ff3366"; setTimeout(() => document.body.style.backgroundColor = "var(--bg)", 1000); }
+        if(event.data.type === 'HORN') { document.body.style.backgroundColor = "#ffc107"; setTimeout(() => document.body.style.backgroundColor = "var(--bg)", 1000); }
     };
 
     function updateTimerDisplay(seconds) {
@@ -71,24 +95,42 @@
 
     function render() {
         document.getElementById('waiting-screen').style.display = 'none';
-        const isPause = currentState.phase === 'pause';
-        document.getElementById('active-phase').style.display = isPause ? 'none' : 'flex';
-        document.getElementById('pause-phase').style.display = isPause ? 'grid' : 'none';
+        
+        const phase = currentState.phase; // 'pause' oder 'active'
+        const stage = currentState.stage; // 'groups', 'ko', 'finished'
 
-        if(isPause) { renderTables(); renderSchedule(); } 
-        else { renderActiveMatches(); updateTimerDisplay(currentState.timeRemaining); }
+        document.getElementById('active-phase').style.display = (phase === 'active' && stage !== 'finished') ? 'flex' : 'none';
+        document.getElementById('pause-phase').style.display = (phase === 'pause' && stage !== 'finished') ? 'flex' : 'none';
+        document.getElementById('finished-phase').style.display = (stage === 'finished') ? 'block' : 'none';
+
+        if(stage === 'finished') {
+            renderSiegerehrung();
+        } else if(phase === 'pause') {
+            if(stage === 'ko') {
+                document.getElementById('groups-wrapper').style.display = 'none'; // Tabellen in der KO Phase verstecken!
+                document.getElementById('schedule-title').innerText = "K.O. Runden";
+            } else {
+                document.getElementById('groups-wrapper').style.display = 'block';
+                document.getElementById('schedule-title').innerText = "Spielplan";
+                renderTables();
+            }
+            renderSchedule();
+        } else {
+            renderActiveMatches();
+            updateTimerDisplay(currentState.timeRemaining);
+        }
     }
 
     function renderActiveMatches() {
         if(currentState.currentSlot >= currentState.timeslots.length) return;
         const slot = currentState.timeslots[currentState.currentSlot];
         
-        // Zeige den K.O. Runden-Namen an, falls vorhanden
         document.getElementById('round-title').innerText = slot.name ? slot.name : `Runde ${currentState.currentSlot + 1}`;
         
         let html = '';
         slot.matches.forEach((m, i) => {
-            html += `<div><strong>Feld ${i+1}:</strong> <span class="badge" style="background:${m.t1.color}"></span>${m.t1.name} vs ${m.t2.name}<span class="badge" style="background:${m.t2.color}"></span></div>`;
+            let info = m.koType === 'P3' ? '(Spiel um Platz 3)' : (m.koType === 'FINALE' ? '(FINALE)' : `Feld ${i+1}`);
+            html += `<div><span style="color:#666; margin-right: 15px; font-size: 0.7em; text-transform: uppercase;">${info}:</span> <span class="badge" style="background:${m.t1.color}"></span>${m.t1.name} <span style="color:#999; margin:0 10px;">vs</span> ${m.t2.name}<span class="badge" style="background:${m.t2.color}"></span></div>`;
         });
         document.getElementById('current-matches-display').innerHTML = html;
     }
@@ -99,11 +141,11 @@
             let sortedTeams = [...group].map(t => currentState.teams.find(st => st.id === t.id));
             sortedTeams.sort((a, b) => b.points - a.points || b.diff - a.diff);
             
-            html += `<h3>Gruppe ${String.fromCharCode(65 + i)}</h3><table><tr><th>Team</th><th>Pkt</th><th>Diff</th></tr>`;
-            sortedTeams.forEach(t => {
-                html += `<tr><td><span class="badge" style="background:${t.color}"></span>${t.name}</td><td>${t.points}</td><td>${t.diff > 0 ? '+'+t.diff : t.diff}</td></tr>`;
+            html += `<div class="card"><h3>Gruppe ${String.fromCharCode(65 + i)}</h3><table><tr><th>Team</th><th>Pkt</th><th>Diff</th></tr>`;
+            sortedTeams.forEach((t, idx) => {
+                html += `<tr><td><strong style="color:#999; margin-right:10px;">${idx+1}.</strong><span class="badge" style="background:${t.color}"></span><strong>${t.name}</strong></td><td><strong>${t.points}</strong></td><td>${t.diff > 0 ? '+'+t.diff : t.diff}</td></tr>`;
             });
-            html += `</table>`;
+            html += `</table></div>`;
         });
         document.getElementById('tables-content').innerHTML = html;
     }
@@ -117,96 +159,46 @@
                 const slot = currentState.timeslots[slotIdx];
                 const title = slot.name ? slot.name : `Runde ${slotIdx + 1}`;
                 
-                html += `<h3>${offset === 0 ? 'Als Nächstes' : 'Danach'} (${title})</h3><table style="font-size:1em;">`;
+                // In der KO Phase machen wir die Karten etwas größer
+                let cardStyle = currentState.stage === 'ko' ? 'max-width: 800px; width: 100%;' : '';
+                
+                html += `<div class="card" style="${cardStyle}"><h3>${offset === 0 ? 'Als Nächstes' : 'Danach'} (${title})</h3><table>`;
                 slot.matches.forEach((m, i) => {
-                    html += `<tr><td>Feld ${i+1}</td><td><span class="badge" style="background:${m.t1.color}"></span>${m.t1.name} vs ${m.t2.name}<span class="badge" style="background:${m.t2.color}"></span></td></tr>`;
+                    let info = m.koType === 'P3' ? 'Spiel Platz 3' : (m.koType === 'FINALE' ? 'FINALE' : `Feld ${i+1}`);
+                    html += `<tr><td style="color:#666; width: 120px; font-weight:bold;">${info}</td><td><span class="badge" style="background:${m.t1.color}"></span><strong style="font-size: 1.2em;">${m.t1.name}</strong> <span style="color:#999; font-size:0.8em; margin:0 15px;">vs</span> <strong style="font-size: 1.2em;">${m.t2.name}</strong><span class="badge" style="background:${m.t2.color}"></span></td></tr>`;
                 });
-                html += `</table>`;
+                html += `</table></div>`;
             }
         }
         
-        // Wenn keine Spiele mehr da sind, K.O. Phase Ankündigung anzeigen
         if(html === '' && currentState.currentSlot >= currentState.timeslots.length) {
-            html = '<h3 style="color: var(--primary);">Vorrunde beendet! K.O.-Spiele werden ermittelt...</h3>';
+            html = '<div class="card" style="text-align: center; max-width: 600px;"><h3 style="margin-bottom:0;">Phase beendet!</h3><p>Der Turnierleiter bereitet die nächsten Spiele vor...</p></div>';
         }
         document.getElementById('schedule-content').innerHTML = html;
     }
-</script>
-</body>
-</html>            updateTimerDisplay(event.data.time);
-        }
-        if(event.data.type === 'HORN') {
-            document.body.style.backgroundColor = "#ff3366";
-            setTimeout(() => document.body.style.backgroundColor = "var(--bg)", 1000);
-        }
-    };
 
-    function updateTimerDisplay(seconds) {
-        let m = Math.floor(seconds / 60).toString().padStart(2, '0');
-        let s = (seconds % 60).toString().padStart(2, '0');
-        const timerEl = document.getElementById('timer');
-        timerEl.innerText = `${m}:${s}`;
+    function renderSiegerehrung() {
+        const list = document.getElementById('final-ranking-list');
+        list.innerHTML = '';
         
-        timerEl.className = '';
-        if(seconds <= 60) timerEl.classList.add('timer-red');
-        else if(seconds <= 300) timerEl.classList.add('timer-yellow');
-    }
-
-    function render() {
-        document.getElementById('waiting-screen').style.display = 'none';
-        const isPause = currentState.phase === 'pause';
-        document.getElementById('active-phase').style.display = isPause ? 'none' : 'flex';
-        document.getElementById('pause-phase').style.display = isPause ? 'grid' : 'none';
-
-        if(isPause) {
-            renderTables();
-            renderSchedule();
-        } else {
-            renderActiveMatches();
-            updateTimerDisplay(currentState.timeRemaining);
-        }
-    }
-
-    function renderActiveMatches() {
-        if(currentState.currentSlot >= currentState.timeslots.length) return;
-        const matches = currentState.timeslots[currentState.currentSlot].matches;
-        let html = '';
-        matches.forEach((m, i) => {
-            html += `<div><strong>Feld ${i+1}:</strong> <span class="badge" style="background:${m.t1.color}"></span>${m.t1.name} vs ${m.t2.name}<span class="badge" style="background:${m.t2.color}"></span></div>`;
-        });
-        document.getElementById('current-matches-display').innerHTML = html;
-    }
-
-    function renderTables() {
-        let html = '';
-        currentState.groups.forEach((group, i) => {
-            // Tabelle sortieren: Punkte, dann Differenz
-            let sortedTeams = [...group].map(t => currentState.teams.find(st => st.id === t.id));
-            sortedTeams.sort((a, b) => b.points - a.points || b.diff - a.diff);
+        currentState.finalRankings.forEach((t, index) => {
+            let place = index + 1;
+            let rankClass = '';
+            let medal = `<span style="color:#999;">${place}.</span>`;
             
-            html += `<h3>Gruppe ${String.fromCharCode(65 + i)}</h3><table><tr><th>Team</th><th>Pkt</th><th>Diff</th></tr>`;
-            sortedTeams.forEach(t => {
-                html += `<tr><td><span class="badge" style="background:${t.color}"></span>${t.name}</td><td>${t.points}</td><td>${t.diff > 0 ? '+'+t.diff : t.diff}</td></tr>`;
-            });
-            html += `</table>`;
-        });
-        document.getElementById('tables-content').innerHTML = html;
-    }
+            if(place === 1) { rankClass = 'rank-1'; medal = '🥇'; }
+            if(place === 2) { rankClass = 'rank-2'; medal = '🥈'; }
+            if(place === 3) { rankClass = 'rank-3'; medal = '🥉'; }
 
-    function renderSchedule() {
-        let html = '';
-        const start = currentState.currentSlot;
-        for(let offset = 0; offset < 2; offset++) {
-            const slotIdx = start + offset;
-            if(slotIdx < currentState.timeslots.length) {
-                html += `<h3>${offset === 0 ? 'Als Nächstes' : 'Danach'} (Runde ${slotIdx + 1})</h3><table style="font-size:1em;">`;
-                currentState.timeslots[slotIdx].matches.forEach((m, i) => {
-                    html += `<tr><td>Feld ${i+1}</td><td><span class="badge" style="background:${m.t1.color}"></span>${m.t1.name} vs ${m.t2.name}<span class="badge" style="background:${m.t2.color}"></span></td></tr>`;
-                });
-                html += `</table>`;
-            }
-        }
-        document.getElementById('schedule-content').innerHTML = html || '<h3>Gruppenphase beendet!</h3>';
+            list.innerHTML += `
+                <li class="rank-item ${rankClass}">
+                    <div class="medal">${medal}</div>
+                    <span class="badge" style="background:${t.color}; width: 30px; height: 30px; margin-right: 20px;"></span>
+                    <div style="flex-grow: 1;">${t.name}</div>
+                    <div style="font-size: 0.6em; color: #666; font-weight: normal;">${t.points} Pkt | Diff: ${t.diff > 0 ? '+'+t.diff : t.diff}</div>
+                </li>
+            `;
+        });
     }
 </script>
 </body>
