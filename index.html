@@ -24,8 +24,6 @@
         input[type=range] { width: 100%; margin: 15px 0; cursor: pointer; }
         .team-winner { background: #d4edda; color: #155724; padding: 2px 8px; border-radius: 4px; border: 1px solid #c3e6cb; }
         .team-loser { opacity: 0.5; text-decoration: line-through; }
-        
-        /* Neu: Text abschneiden wenn zu lang */
         .truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px; display: inline-block; vertical-align: middle; }
     </style>
 </head>
@@ -39,7 +37,7 @@
     
     <div id="resume-box" style="display:none; background: #d4edda; padding: 15px; border-radius: 8px; margin-bottom: 20px; text-align: center;">
         <strong>Laufendes Turnier gefunden!</strong><br>
-        <button onclick="resumeTournament()" class="btn-green">Turnier fortsetzen</button>
+        <button onclick="resumeTournament()" class="btn-green">Fortsetzen</button>
         <button onclick="clearStorage()" class="btn-red">Neues Turnier starten</button>
     </div>
 
@@ -55,7 +53,7 @@
     <h2 style="margin-top: 30px; text-align: left; border-bottom: 2px solid var(--border);">Team Eingabe</h2>
     <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;">
         <label>Anzahl Teams:</label>
-        <input type="number" id="team-count-input" value="4" min="4" max="50" style="width: 60px;" onchange="syncTeamCount(this.value)">
+        <input type="number" id="team-count-input" value="8" min="4" max="50" style="width: 60px;" onchange="syncTeamCount(this.value)">
         <button onclick="addTeams(1)" class="btn-grey">+1</button> <button onclick="addTeams(5)" class="btn-grey">+5</button>
     </div>
 
@@ -101,7 +99,7 @@
 
 <script>
     const COLORS = ['#FF4136', '#2ECC40', '#0074D9', '#B10DC9', '#39CCCC', '#FF851B', '#F012BE', '#01FF70', '#85144b', '#FFDC00', '#7FDBFF', '#3D9970', '#001f3f', '#aaaaaa', '#ffb6c1', '#20b2aa', '#ffa07a', '#ff69b4', '#4682b4', '#9acd32'];
-    let state = { teams: [], groups: [], timeslots: [], currentSlot: 0, phase: 'pause', stage: 'groups', bracket: null, p3Teams: null, timeRemaining: 720, defaultTime: 720, isTimerRunning: false, numFields: 2 };
+    let state = { teams: [], groups: [], timeslots: [], currentSlot: 0, phase: 'pause', stage: 'groups', bracket: null, waitingTeams: [], p3Teams: null, timeRemaining: 720, defaultTime: 720, isTimerRunning: false, numFields: 2 };
     const bc = new BroadcastChannel('tournament_channel');
     let timerInterval;
 
@@ -126,7 +124,6 @@
         if (targetCount > currentRows) {
             for(let i = currentRows; i < targetCount; i++) {
                 let div = document.createElement('div'); div.className = 'team-row';
-                // MAXLENGTH="20" eingefügt, damit nicht unendlich lange Namen reingeschrieben werden
                 div.innerHTML = `<span style="width: 25px; color: #888; font-weight: bold;">${i+1}.</span><input type="text" class="team-input" placeholder="Team Name" maxlength="20" value="Team ${i+1}" style="flex-grow: 1;" onchange="updateForecast()"><button onclick="removeTeam(this)" class="btn-red">X</button>`;
                 container.appendChild(div);
             }
@@ -191,13 +188,11 @@
         while(allMatches.length > 0) {
             let slot = { matches: [] };
             let slotTeams = new Set();
-            
             allMatches.sort((a, b) => {
                 let scoreA = Math.max(teamLastPlayed[a.t1.id], teamLastPlayed[a.t2.id]);
                 let scoreB = Math.max(teamLastPlayed[b.t1.id], teamLastPlayed[b.t2.id]);
                 return scoreA - scoreB;
             });
-
             let i = 0;
             while(i < allMatches.length && slot.matches.length < state.numFields) {
                 let m = allMatches[i];
@@ -221,38 +216,53 @@
         updateAdminView(); broadcastState();
     }
 
-    function backToSetup() {
-        if(confirm("Wirklich zurück zum Setup? Alle bisherigen Ergebnisse gehen verloren!")) { clearStorage(); location.reload(); }
-    }
+    function backToSetup() { if(confirm("Wirklich zurück zum Setup? Alle Ergebnisse gehen verloren!")) { clearStorage(); location.reload(); } }
 
     function prepareKO() {
         let adv = parseInt(document.getElementById('ko-advancing').value);
-        let neededTeams = adv * state.groups.length;
-        let bracketSize = neededTeams <= 4 ? 4 : (neededTeams <= 8 ? 8 : 16);
-        
-        let advancingTeams = [];
-        state.groups.forEach(g => {
-            let sorted = [...g].map(t => state.teams.find(st => st.id === t.id)).sort((a, b) => b.points - a.points || b.diff - a.diff);
-            advancingTeams.push(...sorted.slice(0, adv));
-        });
-
-        let overall = [...state.teams].sort((a, b) => b.points - a.points || b.diff - a.diff);
-        while(advancingTeams.length < bracketSize) {
-            let nextBest = overall.find(t => !advancingTeams.includes(t));
-            if(nextBest) advancingTeams.push(nextBest); else break;
-        }
-        advancingTeams = advancingTeams.slice(0, bracketSize);
-        advancingTeams.sort((a, b) => b.points - a.points || b.diff - a.diff);
-
         state.stage = 'ko';
-        let roundName = bracketSize === 4 ? 'Halbfinale' : (bracketSize === 8 ? 'Viertelfinale' : 'Achtelfinale');
+        state.waitingTeams = [];
         let matches = [];
-        
-        let seeds = bracketSize === 8 ? [0,7, 3,4, 2,5, 1,6] : (bracketSize === 4 ? [0,3, 1,2] : [0,1]);
-        for(let i=0; i<bracketSize; i+=2) {
-            if(advancingTeams[seeds[i]] && advancingTeams[seeds[i+1]]) {
+        let roundName = "";
+
+        // SONDERFALL: 2 Gruppen à 3 Teams kommen weiter = 6 Teams
+        if (state.groups.length === 2 && adv === 3) {
+            roundName = "Zwischenrunde";
+            let gA = [...state.groups[0]].map(t => state.teams.find(st => st.id === t.id)).sort((a, b) => b.points - a.points || b.diff - a.diff);
+            let gB = [...state.groups[1]].map(t => state.teams.find(st => st.id === t.id)).sort((a, b) => b.points - a.points || b.diff - a.diff);
+
+            // 1.A und 1.B kommen direkt ins Halbfinale (warten)
+            state.waitingTeams = [gA[0], gB[0]];
+
+            // Play-offs: 2.A vs 3.B und 2.B vs 3.A
+            matches.push({t1: gA[1], t2: gB[2], score1: null, score2: null, isKO: true, koRound: roundName});
+            matches.push({t1: gB[1], t2: gA[2], score1: null, score2: null, isKO: true, koRound: roundName});
+            
+            state.bracket = { size: 6, teams: [gA[0], gB[0], gA[1], gB[1], gA[2], gB[2]] };
+        } 
+        else {
+            // REGULÄRER ABLAUF (4, 8, 16 Teams)
+            let neededTeams = adv * state.groups.length;
+            let bracketSize = neededTeams <= 4 ? 4 : (neededTeams <= 8 ? 8 : 16);
+            let advancingTeams = [];
+            state.groups.forEach(g => {
+                let sorted = [...g].map(t => state.teams.find(st => st.id === t.id)).sort((a, b) => b.points - a.points || b.diff - a.diff);
+                advancingTeams.push(...sorted.slice(0, adv));
+            });
+            let overall = [...state.teams].sort((a, b) => b.points - a.points || b.diff - a.diff);
+            while(advancingTeams.length < bracketSize) {
+                let nextBest = overall.find(t => !advancingTeams.includes(t));
+                if(nextBest) advancingTeams.push(nextBest); else break;
+            }
+            advancingTeams = advancingTeams.slice(0, bracketSize);
+            advancingTeams.sort((a, b) => b.points - a.points || b.diff - a.diff);
+
+            roundName = bracketSize === 4 ? 'Halbfinale' : (bracketSize === 8 ? 'Viertelfinale' : 'Achtelfinale');
+            let seeds = bracketSize === 8 ? [0,7, 3,4, 2,5, 1,6] : (bracketSize === 4 ? [0,3, 1,2] : [0,1]);
+            for(let i=0; i<bracketSize; i+=2) {
                 matches.push({t1: advancingTeams[seeds[i]], t2: advancingTeams[seeds[i+1]], score1: null, score2: null, isKO: true, koRound: roundName});
             }
+            state.bracket = { size: bracketSize, teams: advancingTeams };
         }
 
         let tempSlots = [];
@@ -262,37 +272,42 @@
             if(!placed) tempSlots.push({name: roundName, matches: [m]});
         }
         state.timeslots.push(...tempSlots);
-        state.bracket = { size: bracketSize, teams: advancingTeams };
-        
         localStorage.setItem('tourney_state', JSON.stringify(state)); updateAdminView(); broadcastState();
     }
 
     function advanceKO() {
-        if(state.currentSlot === 0) return;
         let lastMatch = state.timeslots[state.currentSlot - 1].matches[0];
         let currentRoundName = lastMatch.koRound;
         
         let lastRoundMatches = [];
         for(let i = state.currentSlot - 1; i >= 0; i--) {
             let slotMatches = state.timeslots[i].matches;
-            if(slotMatches[0].isKO && slotMatches[0].koRound === currentRoundName) {
-                lastRoundMatches.unshift(...slotMatches);
-            } else break;
+            if(slotMatches[0].isKO && slotMatches[0].koRound === currentRoundName) lastRoundMatches.unshift(...slotMatches);
+            else break;
         }
 
         let winners = lastRoundMatches.map(m => m.score1 > m.score2 ? m.t1 : m.t2);
         let losers = lastRoundMatches.map(m => m.score1 < m.score2 ? m.t1 : m.t2);
-        if(winners.includes(undefined)) return alert("Fehler: Nicht alle Spiele haben einen gültigen Sieger!");
 
-        let isFinal = currentRoundName === 'Halbfinale';
-        let isVF = currentRoundName === 'Viertelfinale';
-        let roundName = isFinal ? 'Finale' : (isVF ? 'Halbfinale' : 'Nächste Runde');
+        let roundName = "";
         let matches = [];
 
-        if(isFinal) {
+        // SONDERFALL: Wir kommen aus der Zwischenrunde (6 Teams System)
+        if (currentRoundName === "Zwischenrunde") {
+            roundName = "Halbfinale";
+            // winners[0] kam aus 2A vs 3B -> spielt gegen 1B
+            // winners[1] kam aus 2B vs 3A -> spielt gegen 1A
+            matches.push({t1: state.waitingTeams[1], t2: winners[0], score1: null, score2: null, isKO: true, koRound: roundName});
+            matches.push({t1: state.waitingTeams[0], t2: winners[1], score1: null, score2: null, isKO: true, koRound: roundName});
+            state.waitingTeams = []; // Leeren
+        } 
+        else if(currentRoundName === 'Halbfinale') {
+            roundName = "Finale";
             matches.push({t1: winners[0], t2: winners[1], score1: null, score2: null, isKO: true, koRound: 'Finale'});
             state.p3Teams = [losers[0], losers[1]]; 
-        } else {
+        } 
+        else {
+            roundName = currentRoundName === 'Viertelfinale' ? 'Halbfinale' : 'Nächste Runde';
             for(let i=0; i<winners.length; i+=2) {
                 if(winners[i+1]) matches.push({t1: winners[i], t2: winners[i+1], score1: null, score2: null, isKO: true, koRound: roundName});
             }
@@ -309,18 +324,13 @@
     }
 
     function triggerPlatz3() {
-        if(!state.p3Teams) return;
-        state.timeslots.push({
-            name: 'Spiel um Platz 3',
-            matches: [{t1: state.p3Teams[0], t2: state.p3Teams[1], score1: null, score2: null, isKO: true, koRound: 'Platz 3'}]
-        });
+        state.timeslots.push({ name: 'Spiel um Platz 3', matches: [{t1: state.p3Teams[0], t2: state.p3Teams[1], score1: null, score2: null, isKO: true, koRound: 'Platz 3'}] });
         localStorage.setItem('tourney_state', JSON.stringify(state)); updateAdminView(); broadcastState();
     }
 
     function updateAdminView() {
         const container = document.getElementById('active-matches'); const roundHeader = document.getElementById('round-header');
         container.innerHTML = '';
-        
         document.getElementById('back-to-setup-btn').style.display = (state.currentSlot < 2 && state.stage === 'groups') ? 'inline-block' : 'none';
         document.getElementById('undo-btn').style.display = state.currentSlot > 0 ? 'block' : 'none';
 
@@ -328,28 +338,18 @@
             document.getElementById('save-btn').style.display = 'none';
             if(state.stage === 'groups') {
                 roundHeader.innerHTML = "Gruppenphase beendet!";
-                container.innerHTML = `
-                    <div style="background: #e9ecef; padding: 20px; border-radius: 8px; text-align: center; border: 2px dashed var(--primary);">
-                        <h3 style="margin-top:0;">Turnierbaum generieren</h3>
-                        <p>Wie viele Teams <strong>pro Gruppe</strong> kommen weiter?</p>
-                        <select id="ko-advancing" style="width: 100%; font-size: 1.2em;"><option value="1">1 Team</option><option value="2" selected>2 Teams</option><option value="3">3 Teams</option></select>
-                        <p style="font-size: 0.8em; color: #666;">Tipp: Fehlende Plätze füllt die App automatisch mit "Lucky Losern" auf ein 8er Viertelfinale auf.</p>
-                        <button onclick="prepareKO()" class="btn-green" style="width: 100%; font-size: 1.2em; padding: 15px;">K.O.-Phase starten</button>
-                    </div>`;
+                container.innerHTML = `<div style="background: #e9ecef; padding: 20px; border-radius: 8px; text-align: center; border: 2px dashed var(--primary);"><h3>K.O.-Phase starten</h3><p>Wie viele Teams pro Gruppe kommen weiter?</p><select id="ko-advancing" style="width: 100%; font-size: 1.2em;"><option value="1">1 Team</option><option value="2" selected>2 Teams</option><option value="3">3 Teams</option></select><button onclick="prepareKO()" class="btn-green" style="width: 100%; margin-top: 15px; padding: 15px;">Turnierbaum generieren</button></div>`;
             } else {
                 let lastMatch = state.timeslots[state.currentSlot-1].matches[0];
                 if(lastMatch.koRound === 'Finale') {
                     roundHeader.innerHTML = "Finale beendet!";
-                    container.innerHTML = `
-                        <button onclick="triggerPlatz3()" class="btn-grey" style="width: 100%; margin-bottom: 10px;">Spiel um Platz 3 hinzufügen</button>
-                        <button onclick="state.stage='finished'; broadcastState();" class="btn-green" style="width: 100%; font-size: 1.2em; padding: 15px;">Siegerehrung auf Beamer starten 🏆</button>
-                    `;
+                    container.innerHTML = `<button onclick="triggerPlatz3()" class="btn-grey" style="width: 100%; margin-bottom: 10px;">Spiel um Platz 3 hinzufügen</button><button onclick="state.stage='finished'; broadcastState();" class="btn-green" style="width: 100%; padding: 15px;">Siegerehrung starten 🏆</button>`;
                 } else if(lastMatch.koRound === 'Platz 3') {
                     roundHeader.innerHTML = "Turnier beendet!";
-                    container.innerHTML = `<button onclick="state.stage='finished'; broadcastState();" class="btn-green" style="width: 100%; font-size: 1.2em; padding: 15px;">Siegerehrung auf Beamer starten 🏆</button>`;
+                    container.innerHTML = `<button onclick="state.stage='finished'; broadcastState();" class="btn-green" style="width: 100%; padding: 15px;">Siegerehrung starten 🏆</button>`;
                 } else {
                     roundHeader.innerHTML = "Runde beendet!";
-                    container.innerHTML = `<button onclick="advanceKO()" class="btn-green" style="width: 100%; font-size: 1.2em; padding: 15px;">Nächste Runde in Turnierbaum aufbauen</button>`;
+                    container.innerHTML = `<button onclick="advanceKO()" class="btn-green" style="width: 100%; padding: 15px;">Nächste Runde aufbauen</button>`;
                 }
             }
             renderHistory(); return;
@@ -358,21 +358,8 @@
         document.getElementById('save-btn').style.display = 'block';
         const slot = state.timeslots[state.currentSlot];
         roundHeader.innerHTML = slot.name ? `Aktuelle Spiele: ${slot.name}` : `Aktuelle Spiele (Runde ${state.currentSlot + 1})`;
-        
         slot.matches.forEach((m, index) => {
-            let title = m.koRound ? m.koRound.toUpperCase() : `Feld ${index + 1}`;
-            container.innerHTML += `
-                <div class="match-card">
-                    <div style="color: #666; font-weight: bold; width: 100px;">${title}</div>
-                    <div style="flex-grow: 1; text-align: center; font-size: 1.1em; display:flex; justify-content:center; align-items:center;">
-                        <span class="badge" style="background:${m.t1.color}"></span><span class="truncate" style="font-weight:bold;">${m.t1.name}</span> 
-                        <span style="color:#999; margin: 0 10px;">vs</span> 
-                        <span class="truncate" style="font-weight:bold;">${m.t2.name}</span><span class="badge" style="background:${m.t2.color}; margin-left:8px; margin-right:0;"></span>
-                    </div>
-                    <div class="match-inputs">
-                        <input type="number" id="score1-${index}"> : <input type="number" id="score2-${index}">
-                    </div>
-                </div>`;
+            container.innerHTML += `<div class="match-card"><div><strong>${m.koRound ? m.koRound.toUpperCase() : 'FELD '+(index+1)}</strong></div><div style="flex-grow: 1; text-align: center;"><span class="badge" style="background:${m.t1.color}"></span><span class="truncate">${m.t1.name}</span> vs <span class="truncate">${m.t2.name}</span><span class="badge" style="background:${m.t2.color}; margin-left:8px;"></span></div><div class="match-inputs"><input type="number" id="score1-${index}"> : <input type="number" id="score2-${index}"></div></div>`;
         });
         renderHistory();
     }
@@ -384,7 +371,7 @@
             const s1 = parseInt(document.getElementById(`score1-${index}`).value);
             const s2 = parseInt(document.getElementById(`score2-${index}`).value);
             if(isNaN(s1) || isNaN(s2)) return alert("Bitte alle Ergebnisse eintragen!");
-            if(m.isKO && s1 === s2) return alert("In der K.O.-Phase gibt es kein Unentschieden! Bitte entscheidet das Spiel.");
+            if(m.isKO && s1 === s2) return alert("In der K.O.-Phase muss es einen Sieger geben!");
             m.score1 = s1; m.score2 = s2;
             if(!m.isKO) {
                 let t1 = state.teams.find(t => t.id === m.t1.id); let t2 = state.teams.find(t => t.id === m.t2.id);
@@ -392,10 +379,7 @@
                 if(s1 > s2) t1.points += 3; else if(s2 > s1) t2.points += 3; else { t1.points += 1; t2.points += 1; }
             }
         }
-        
-        state.currentSlot++; state.phase = 'pause'; 
-        resetTimer(); 
-        updateAdminView(); localStorage.setItem('tourney_state', JSON.stringify(state)); broadcastState();
+        state.currentSlot++; state.phase = 'pause'; resetTimer(); updateAdminView(); localStorage.setItem('tourney_state', JSON.stringify(state)); broadcastState();
     }
 
     function undoLastRound() {
@@ -421,32 +405,24 @@
         const hist = document.getElementById('match-history'); hist.innerHTML = '';
         for(let i = state.currentSlot - 1; i >= 0; i--) {
             let title = state.timeslots[i].name ? state.timeslots[i].name : `Runde ${i+1}`;
-            let html = `<div style="color: var(--primary); font-weight: bold; margin-bottom: 5px;">${title}</div>`;
+            let html = `<div style="color: var(--primary); font-weight: bold;">${title}</div>`;
             state.timeslots[i].matches.forEach(m => { 
                 let w1 = m.score1 > m.score2 ? 'team-winner' : (m.score1 < m.score2 ? 'team-loser' : '');
                 let w2 = m.score2 > m.score1 ? 'team-winner' : (m.score2 < m.score1 ? 'team-loser' : '');
-                html += `<div style="margin-bottom: 5px; font-size: 0.9em; display:flex; justify-content:center;">
-                            <span class="${w1} truncate" style="text-align:right;">${m.t1.name} <strong>(${m.score1})</strong></span> 
-                            <span style="margin: 0 10px;">:</span> 
-                            <span class="${w2} truncate" style="text-align:left;"><strong>(${m.score2})</strong> ${m.t2.name}</span>
-                        </div>`; 
+                html += `<div style="margin-bottom: 5px; font-size: 0.9em; display:flex; justify-content:center;"><span class="${w1} truncate">${m.t1.name} (${m.score1})</span> : <span class="${w2} truncate">(${m.score2}) ${m.t2.name}</span></div>`; 
             });
             hist.innerHTML += `<div class="match-card history-card" style="display:block;">${html}</div>`;
         }
     }
 
     function scrubTimer(val) { state.timeRemaining = parseInt(val); document.getElementById('time-display').innerText = `${Math.floor(state.timeRemaining / 60).toString().padStart(2, '0')}:${(state.timeRemaining % 60).toString().padStart(2, '0')}`; broadcastState(); }
-    function resetTimer() { state.timeRemaining = state.defaultTime; document.getElementById('timer-scrubber').value = state.timeRemaining; scrubTimer(state.timeRemaining); }
+    function resetTimer() { state.timeRemaining = state.defaultTime; updateTimeDisplay(); broadcastState(); }
     function showSettings() { document.getElementById('settings-menu').style.display = document.getElementById('settings-menu').style.display === 'none' ? 'block' : 'none'; }
     function updateTimerConfig() { state.defaultTime = ((parseInt(document.getElementById('timer-minutes').value) || 0) * 60) + (parseInt(document.getElementById('timer-seconds').value) || 0); document.getElementById('timer-scrubber').max = state.defaultTime; resetTimer(); document.getElementById('settings-menu').style.display = 'none'; }
     function updateTimeDisplay() { document.getElementById('time-display').innerText = `${Math.floor(state.timeRemaining / 60).toString().padStart(2, '0')}:${(state.timeRemaining % 60).toString().padStart(2, '0')}`; document.getElementById('timer-scrubber').value = state.timeRemaining; }
     function startTimer() { if(state.isTimerRunning) return; state.phase = 'active'; state.isTimerRunning = true; broadcastState(); timerInterval = setInterval(() => { if(state.timeRemaining > 0) { state.timeRemaining--; updateTimeDisplay(); bc.postMessage({ type: 'TIMER_TICK', time: state.timeRemaining }); } else { pauseTimer(); playHorn(); } }, 1000); }
     function pauseTimer() { state.isTimerRunning = false; clearInterval(timerInterval); broadcastState(); }
-    function playHorn() { 
-        let audio = document.getElementById('horn-sound');
-        audio.currentTime = 0; audio.play().catch(() => alert("Sound konnte nicht abgespielt werden. Bitte prüfe, ob sound.mp3 im Ordner liegt!"));
-        bc.postMessage({ type: 'HORN' }); 
-    }
+    function playHorn() { document.getElementById('horn-sound').currentTime = 0; document.getElementById('horn-sound').play().catch(()=>{}); bc.postMessage({ type: 'HORN' }); }
     function broadcastState() { bc.postMessage({ type: 'STATE_UPDATE', state: state }); }
 </script>
 </body>
