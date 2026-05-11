@@ -32,7 +32,6 @@
         .bracket-container { display: flex; justify-content: center; align-items: stretch; width: 100%; gap: 15px; padding: 20px 0; height: 500px; }
         .bracket-col { display: flex; flex-direction: column; width: 22%; }
         
-        /* Wrapper um Halbfinale exakt mittig zwischen Viertelfinals zu setzen */
         .match-wrapper { flex-grow: 1; display: flex; flex-direction: column; }
         .match-wrapper.space-around { justify-content: space-around; }
         .match-wrapper.center { justify-content: center; }
@@ -47,19 +46,27 @@
         .team-winner { background: #d4edda; color: #155724; }
         .team-loser { opacity: 0.4; text-decoration: line-through; }
         
-        /* Punktzahl-Kasten, damit es sich nie überschneidet */
         .score-box { background: rgba(0,0,0,0.08); padding: 2px 8px; border-radius: 4px; min-width: 25px; text-align: center; color: #333; font-family: monospace; font-size: 1.1em; margin-left: 10px; }
         
-        /* PODIUM STYLING */
-        .podium-container { display: flex; align-items: flex-end; justify-content: center; height: 400px; gap: 15px; margin: 60px 0; }
-        .podium-step { display: flex; flex-direction: column; align-items: center; width: 220px; text-align: center; border-radius: 8px 8px 0 0; position: relative; box-shadow: inset 0 0 20px rgba(0,0,0,0.2), 0 -5px 15px rgba(0,0,0,0.1); }
+        /* --- UPDATE: GIGANTISCHES PODIUM STYLING --- */
+        #finished-phase { padding: 20px; display: flex; flex-direction: column; justify-content: space-between; align-items: center; height: 100vh; }
+
+        .podium-container { display: flex; align-items: flex-end; justify-content: center; width: 100%; flex-grow: 1; gap: 2vw; margin-top: 2vh; margin-bottom: 2vh; }
         
-        .podium-team-label { position: absolute; top: -20px; background: white; color: #333; padding: 8px 15px; border-radius: 20px; font-size: 0.45em; font-weight: bold; box-shadow: 0 4px 10px rgba(0,0,0,0.15); max-width: 90%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; }
+        .podium-step { display: flex; flex-direction: column; align-items: center; width: 28%; text-align: center; border-radius: 15px 15px 0 0; position: relative; box-shadow: inset 0 0 30px rgba(0,0,0,0.3), 0 -10px 25px rgba(0,0,0,0.15); transition: height 0.5s ease-out; }
         
-        .step-2 { height: 60%; }
-        .step-1 { height: 90%; z-index: 10; }
+        /* Neu: Riesige Teamnamen über den Säulen */
+        .podium-team-name { font-size: 3.5vw; font-weight: 800; color: #111; margin-bottom: 15px; line-height: 1.1; width: 100%; word-wrap: break-word; hyphens: auto; text-shadow: 0 2px 4px rgba(255,255,255,0.5); }
+        
+        /* Die Säulen-Höhen relativ zum Container */
+        .step-2 { height: 65%; }
+        .step-1 { height: 95%; z-index: 10; }
         .step-3 { height: 45%; }
         
+        /* Die großen Platz-Nummern auf den Säulen */
+        .podium-rank { margin-top: auto; margin-bottom: 3vh; font-size: 8vw; font-weight: 900; color: white; text-shadow: 0 4px 10px rgba(0,0,0,0.4); font-family: 'Arial Black', Gadget, sans-serif; }
+        .step-1 .podium-rank { font-size: 10vw; margin-bottom: 4vh; color: #fff; text-shadow: 0 0 20px rgba(255,255,255,0.6), 0 4px 10px rgba(0,0,0,0.4); }
+
         .truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         
         #waiting-screen { display: flex; justify-content: center; align-items: center; height: 100vh; font-size: 3em; color: #666; font-weight: bold; }
@@ -92,8 +99,8 @@
 </div>
 
 <div id="finished-phase" class="view">
-    <h1 style="font-size: 4em; color: var(--primary); text-align: center; margin-bottom: 20px;">🏆 Siegerehrung</h1>
-    <div id="podium-area"></div>
+    <h1 style="font-size: 3.5vw; color: var(--primary); text-align: center; margin: 0; text-transform: uppercase; letter-spacing: 2px;">🏆 Siegerehrung 🏆</h1>
+    <div id="podium-area" style="width:100%; flex-grow:1; display:flex;"></div>
 </div>
 
 <script>
@@ -124,7 +131,7 @@
 
         document.getElementById('active-phase').style.display = (phase === 'active' && stage !== 'finished') ? 'flex' : 'none';
         document.getElementById('pause-phase').style.display = (phase === 'pause' && stage !== 'finished') ? 'flex' : 'none';
-        document.getElementById('finished-phase').style.display = (stage === 'finished') ? 'block' : 'none';
+        document.getElementById('finished-phase').style.display = (stage === 'finished') ? 'flex' : 'none';
 
         if(stage === 'finished') renderSiegerehrung();
         else if(phase === 'pause') {
@@ -200,7 +207,6 @@
         return res;
     }
 
-    // Baut das HTML für eine Box im Turnierbaum
     function createMatchBox(m, isFinale = false) {
         if(!m) return `<div class="match-box empty-match">TBD</div>`;
         let s1 = m.score1 !== null ? m.score1 : '-'; let s2 = m.score2 !== null ? m.score2 : '-';
@@ -225,24 +231,20 @@
         </div>`;
     }
 
-    // Baut den symmetrischen Turnierbaum
     function renderBracket() {
         if(!currentState.bracket) return;
         let html = '';
         let vf = getMatchesFromHistory('Viertelfinale'); let hf = getMatchesFromHistory('Halbfinale'); 
         let fin = getMatchesFromHistory('Finale'); let p3 = getMatchesFromHistory('Platz 3');
 
-        // LINKE SPALTE (VF)
         if(currentState.bracket.size === 8) {
             html += `<div class="bracket-col"><h3 style="text-align:center; color:#888;">Viertelfinale</h3>
                      <div class="match-wrapper space-around">${createMatchBox(vf[0])} ${createMatchBox(vf[1])}</div></div>`;
         }
         
-        // LINKE SPALTE (HF) - Wrapper zentriert die Box exakt mittig
         html += `<div class="bracket-col"><h3 style="text-align:center; color:#888;">Halbfinale</h3>
                  <div class="match-wrapper center">${createMatchBox(hf[0])}</div></div>`;
 
-        // MITTE (FINALE & P3) - Finale hervorgehoben
         html += `<div class="bracket-col center-col">
                     <h2 style="margin:0 0 10px 0; color:var(--primary); font-size:2em;">🏆 Finale</h2>
                     ${createMatchBox(fin[0], true)}
@@ -250,11 +252,9 @@
                     ${createMatchBox(p3[0])}
                  </div>`;
 
-        // RECHTE SPALTE (HF)
         html += `<div class="bracket-col"><h3 style="text-align:center; color:#888;">Halbfinale</h3>
                  <div class="match-wrapper center">${createMatchBox(hf[1])}</div></div>`;
 
-        // RECHTE SPALTE (VF)
         if(currentState.bracket.size === 8) {
             html += `<div class="bracket-col"><h3 style="text-align:center; color:#888;">Viertelfinale</h3>
                      <div class="match-wrapper space-around">${createMatchBox(vf[2])} ${createMatchBox(vf[3])}</div></div>`;
@@ -263,7 +263,7 @@
         document.getElementById('bracket-content').innerHTML = html;
     }
 
-    // Baut das 3D Sieger-Treppchen mit dynamischer Farbe
+    // --- UPDATE: GIGANTISCHE SIEGEREHRUNG ---
     function renderSiegerehrung() {
         let fin = getMatchesFromHistory('Finale')[0]; let p3 = getMatchesFromHistory('Platz 3')[0];
         let first, second, third;
@@ -280,20 +280,20 @@
             html = `
             <div class="podium-container">
                 <div class="podium-step step-2" style="background-color: ${second.color};">
-                    <div class="podium-team-label"><span class="badge" style="background:${second.color}; border: 1px solid #ccc; width:10px; height:10px; margin-right:5px;"></span>${second.name}</div>
-                    <div style="margin-top:auto; margin-bottom: 20px; font-size:2em; text-shadow: 0 2px 4px rgba(0,0,0,0.3);">🥈 2.</div>
+                    <div class="podium-team-name">${second.name}</div>
+                    <div class="podium-rank">2.</div>
                 </div>
                 <div class="podium-step step-1" style="background-color: ${first.color};">
-                    <div class="podium-team-label"><span class="badge" style="background:${first.color}; border: 1px solid #ccc; width:10px; height:10px; margin-right:5px;"></span>${first.name}</div>
-                    <div style="margin-top:auto; margin-bottom: 30px; font-size:2.5em; text-shadow: 0 2px 4px rgba(0,0,0,0.3);">🥇 1.</div>
+                    <div class="podium-team-name">${first.name}</div>
+                    <div class="podium-rank">1.</div>
                 </div>
                 <div class="podium-step step-3" style="background-color: ${third.color};">
-                    <div class="podium-team-label"><span class="badge" style="background:${third.color}; border: 1px solid #ccc; width:10px; height:10px; margin-right:5px;"></span>${third.name}</div>
-                    <div style="margin-top:auto; margin-bottom: 10px; font-size:2em; text-shadow: 0 2px 4px rgba(0,0,0,0.3);">🥉 3.</div>
+                    <div class="podium-team-name">${third.name}</div>
+                    <div class="podium-rank">3.</div>
                 </div>
             </div>`;
         } else {
-            html = `<div style="text-align:center; font-size: 2em; padding: 50px;">Turnier beendet!</div>`;
+            html = `<div style="text-align:center; font-size: 3em; padding: 100px; width:100%;">Warte auf Final-Ergebnisse...</div>`;
         }
         document.getElementById('podium-area').innerHTML = html;
     }
