@@ -26,25 +26,41 @@
         table { width: 100%; border-collapse: collapse; font-size: 1.3em; }
         th, td { text-align: left; padding: 12px; border-bottom: 1px solid var(--border); }
         th { color: #666; font-size: 0.9em; text-transform: uppercase; }
-        .badge { display: inline-block; width: 20px; height: 20px; border-radius: 50%; margin-right: 12px; vertical-align: middle; border: 2px solid rgba(0,0,0,0.1); }
+        .badge { display: inline-block; width: 20px; height: 20px; border-radius: 50%; margin-right: 12px; vertical-align: middle; border: 2px solid rgba(0,0,0,0.1); flex-shrink: 0; }
         
         /* CHAMPIONS LEAGUE BRACKET STYLING */
-        .bracket-container { display: flex; justify-content: center; align-items: stretch; width: 100%; gap: 15px; padding: 20px 0; }
-        .bracket-col { display: flex; flex-direction: column; justify-content: space-around; width: 22%; gap: 20px; }
+        .bracket-container { display: flex; justify-content: center; align-items: stretch; width: 100%; gap: 15px; padding: 20px 0; height: 500px; }
+        .bracket-col { display: flex; flex-direction: column; width: 22%; }
+        
+        /* Wrapper um Halbfinale exakt mittig zwischen Viertelfinals zu setzen */
+        .match-wrapper { flex-grow: 1; display: flex; flex-direction: column; }
+        .match-wrapper.space-around { justify-content: space-around; }
+        .match-wrapper.center { justify-content: center; }
+        
         .center-col { width: 25%; align-items: center; justify-content: center; background: rgba(0,86,179,0.03); border-radius: 12px; padding: 20px; border: 2px dashed #0056b3; }
+        
         .match-box { background: white; border-radius: 6px; border: 2px solid #ccc; padding: 10px; display: flex; flex-direction: column; position: relative; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
+        .finale-box { border: 3px solid #f1c40f; box-shadow: 0 0 20px rgba(241,196,15,0.4); transform: scale(1.05); z-index: 10; }
         .empty-match { opacity: 0.5; border-style: dashed; justify-content: center; align-items: center; font-style: italic; color: #888; height: 80px; }
-        .team-line { display: flex; justify-content: space-between; padding: 5px; font-weight: bold; font-size: 1.1em; border-radius: 4px; }
+        
+        .team-line { display: flex; justify-content: space-between; align-items: center; padding: 5px; font-weight: bold; font-size: 1.1em; border-radius: 4px; }
         .team-winner { background: #d4edda; color: #155724; }
         .team-loser { opacity: 0.4; text-decoration: line-through; }
         
+        /* Punktzahl-Kasten, damit es sich nie überschneidet */
+        .score-box { background: rgba(0,0,0,0.08); padding: 2px 8px; border-radius: 4px; min-width: 25px; text-align: center; color: #333; font-family: monospace; font-size: 1.1em; margin-left: 10px; }
+        
         /* PODIUM STYLING */
-        .podium-container { display: flex; align-items: flex-end; justify-content: center; height: 350px; gap: 10px; margin: 40px 0; }
-        .podium-step { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; width: 200px; text-align: center; border-radius: 8px 8px 0 0; color: white; padding-bottom: 20px; font-size: 2em; font-weight: bold; box-shadow: 0 -5px 15px rgba(0,0,0,0.1); }
-        .step-2 { height: 70%; background: linear-gradient(to top, #bdc3c7, #e0e0e0); color: #333; }
-        .step-1 { height: 100%; background: linear-gradient(to top, #f1c40f, #f9e79f); color: #333; z-index: 10; box-shadow: 0 -10px 20px rgba(241,196,15,0.4); }
-        .step-3 { height: 50%; background: linear-gradient(to top, #d35400, #e59866); color: #fff; }
-        .podium-team { margin-bottom: 15px; background: white; padding: 10px; border-radius: 6px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 110%; color: #333; font-size: 0.7em; }
+        .podium-container { display: flex; align-items: flex-end; justify-content: center; height: 400px; gap: 15px; margin: 60px 0; }
+        .podium-step { display: flex; flex-direction: column; align-items: center; width: 220px; text-align: center; border-radius: 8px 8px 0 0; position: relative; box-shadow: inset 0 0 20px rgba(0,0,0,0.2), 0 -5px 15px rgba(0,0,0,0.1); }
+        
+        .podium-team-label { position: absolute; top: -20px; background: white; color: #333; padding: 8px 15px; border-radius: 20px; font-size: 0.45em; font-weight: bold; box-shadow: 0 4px 10px rgba(0,0,0,0.15); max-width: 90%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; }
+        
+        .step-2 { height: 60%; }
+        .step-1 { height: 90%; z-index: 10; }
+        .step-3 { height: 45%; }
+        
+        .truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         
         #waiting-screen { display: flex; justify-content: center; align-items: center; height: 100vh; font-size: 3em; color: #666; font-weight: bold; }
     </style>
@@ -114,7 +130,7 @@
         else if(phase === 'pause') {
             if(stage === 'ko') {
                 document.getElementById('groups-wrapper').style.display = 'none';
-                document.getElementById('schedule-wrapper').style.display = 'none'; // Spielplan in K.O. verstecken
+                document.getElementById('schedule-wrapper').style.display = 'none';
                 document.getElementById('bracket-wrapper').style.display = 'block';
                 renderBracket();
             } else {
@@ -135,11 +151,11 @@
         let html = '';
         slot.matches.forEach((m, i) => {
             let info = m.koRound ? m.koRound.toUpperCase() : `FELD ${i+1}`;
-            html += `<div style="display:flex; align-items:center;">
+            html += `<div style="display:flex; align-items:center; max-width: 45%;">
                         <span style="color: rgba(255,255,255,0.7); font-size: 0.7em; margin-right: 15px;">${info}:</span> 
-                        <span class="badge" style="background:${m.t1.color}; border: 2px solid white;"></span><span>${m.t1.name}</span> 
+                        <span class="badge" style="background:${m.t1.color}; border: 2px solid white;"></span><span class="truncate">${m.t1.name}</span> 
                         <span style="color: rgba(255,255,255,0.5); font-size: 0.8em; margin: 0 15px;">vs</span> 
-                        <span>${m.t2.name}</span><span class="badge" style="background:${m.t2.color}; border: 2px solid white; margin-left:12px;"></span>
+                        <span class="truncate">${m.t2.name}</span><span class="badge" style="background:${m.t2.color}; border: 2px solid white; margin-left:12px;"></span>
                      </div>`;
         });
         document.getElementById('current-matches-display').innerHTML = html;
@@ -151,7 +167,7 @@
             let sortedTeams = [...group].map(t => currentState.teams.find(st => st.id === t.id)).sort((a, b) => b.points - a.points || b.diff - a.diff);
             html += `<div class="card"><h3>Gruppe ${String.fromCharCode(65 + i)}</h3><table><tr><th>Team</th><th>Sp</th><th>Pkt</th><th>Diff</th></tr>`;
             sortedTeams.forEach((t, idx) => {
-                html += `<tr><td><strong style="color:#999; margin-right:10px;">${idx+1}.</strong><span class="badge" style="background:${t.color}"></span><strong>${t.name}</strong></td><td>${t.played}</td><td><strong>${t.points}</strong></td><td>${t.diff > 0 ? '+'+t.diff : t.diff}</td></tr>`;
+                html += `<tr><td><div style="display:flex; align-items:center;"><strong style="color:#999; margin-right:10px;">${idx+1}.</strong><span class="badge" style="background:${t.color}"></span><strong class="truncate" style="max-width: 150px;">${t.name}</strong></div></td><td>${t.played}</td><td><strong>${t.points}</strong></td><td>${t.diff > 0 ? '+'+t.diff : t.diff}</td></tr>`;
             });
             html += `</table></div>`;
         });
@@ -167,7 +183,8 @@
                 html += `<div class="card"><h3>${offset === 0 ? 'Als Nächstes' : 'Danach'} (${title})</h3><table>`;
                 slot.matches.forEach((m, i) => {
                     let info = m.koRound ? m.koRound.toUpperCase() : `Feld ${i+1}`;
-                    html += `<tr><td style="color:#666; width: 140px; font-weight:bold;">${info}</td><td><span class="badge" style="background:${m.t1.color}"></span><strong style="font-size: 1.2em;">${m.t1.name}</strong> <span style="color:#999; font-size:0.8em; margin:0 15px;">vs</span> <strong style="font-size: 1.2em;">${m.t2.name}</strong><span class="badge" style="background:${m.t2.color}"></span></td></tr>`;
+                    html += `<tr><td style="color:#666; width: 140px; font-weight:bold;">${info}</td>
+                                 <td><div style="display:flex; align-items:center;"><span class="badge" style="background:${m.t1.color}"></span><strong class="truncate" style="max-width:120px; font-size: 1.2em;">${m.t1.name}</strong> <span style="color:#999; font-size:0.8em; margin:0 15px;">vs</span> <strong class="truncate" style="max-width:120px; font-size: 1.2em;">${m.t2.name}</strong><span class="badge" style="background:${m.t2.color}"></span></div></td></tr>`;
                 });
                 html += `</table></div>`;
             }
@@ -175,7 +192,6 @@
         document.getElementById('schedule-content').innerHTML = html;
     }
 
-    // Sucht zuverlässig alle Spiele einer bestimmten KO Runde aus der Historie (falls auf Felder aufgeteilt)
     function getMatchesFromHistory(roundName) {
         let res = [];
         for (let i = 0; i < currentState.timeslots.length; i++) {
@@ -184,21 +200,32 @@
         return res;
     }
 
-    // Baut das HTML für eine einzelne Begegnungs-Box im Turnierbaum
-    function createMatchBox(m) {
+    // Baut das HTML für eine Box im Turnierbaum
+    function createMatchBox(m, isFinale = false) {
         if(!m) return `<div class="match-box empty-match">TBD</div>`;
         let s1 = m.score1 !== null ? m.score1 : '-'; let s2 = m.score2 !== null ? m.score2 : '-';
         let w1 = m.score1 !== null && m.score1 > m.score2 ? 'team-winner' : (m.score1 !== null && m.score1 < m.score2 ? 'team-loser' : '');
         let w2 = m.score2 !== null && m.score2 > m.score1 ? 'team-winner' : (m.score2 !== null && m.score2 < m.score1 ? 'team-loser' : '');
+        let finClass = isFinale ? 'finale-box' : '';
         
-        return `<div class="match-box">
-            <div class="team-line ${w1}"><span style="display:flex; align-items:center;"><span class="badge" style="background:${m.t1.color}"></span>${m.t1.name}</span><strong>${s1}</strong></div>
+        return `<div class="match-box ${finClass}">
+            <div class="team-line ${w1}">
+                <div style="display:flex; align-items:center; overflow:hidden; padding-right: 10px;">
+                    <span class="badge" style="background:${m.t1.color}"></span><span class="truncate" style="max-width: 100px;">${m.t1.name}</span>
+                </div>
+                <div class="score-box">${s1}</div>
+            </div>
             <div style="border-top:1px solid var(--border); margin: 3px 0;"></div>
-            <div class="team-line ${w2}"><span style="display:flex; align-items:center;"><span class="badge" style="background:${m.t2.color}"></span>${m.t2.name}</span><strong>${s2}</strong></div>
+            <div class="team-line ${w2}">
+                <div style="display:flex; align-items:center; overflow:hidden; padding-right: 10px;">
+                    <span class="badge" style="background:${m.t2.color}"></span><span class="truncate" style="max-width: 100px;">${m.t2.name}</span>
+                </div>
+                <div class="score-box">${s2}</div>
+            </div>
         </div>`;
     }
 
-    // Baut den Turnierbaum (Links -> Mitte <- Rechts)
+    // Baut den symmetrischen Turnierbaum
     function renderBracket() {
         if(!currentState.bracket) return;
         let html = '';
@@ -208,62 +235,61 @@
         // LINKE SPALTE (VF)
         if(currentState.bracket.size === 8) {
             html += `<div class="bracket-col"><h3 style="text-align:center; color:#888;">Viertelfinale</h3>
-                     ${createMatchBox(vf[0])} ${createMatchBox(vf[1])}</div>`;
+                     <div class="match-wrapper space-around">${createMatchBox(vf[0])} ${createMatchBox(vf[1])}</div></div>`;
         }
         
-        // LINKE SPALTE (HF)
+        // LINKE SPALTE (HF) - Wrapper zentriert die Box exakt mittig
         html += `<div class="bracket-col"><h3 style="text-align:center; color:#888;">Halbfinale</h3>
-                 ${createMatchBox(hf[0])}</div>`;
+                 <div class="match-wrapper center">${createMatchBox(hf[0])}</div></div>`;
 
-        // MITTE (FINALE & P3)
+        // MITTE (FINALE & P3) - Finale hervorgehoben
         html += `<div class="bracket-col center-col">
                     <h2 style="margin:0 0 10px 0; color:var(--primary); font-size:2em;">🏆 Finale</h2>
-                    ${createMatchBox(fin[0])}
-                    <h4 style="margin: 20px 0 5px 0; color:#888;">Spiel um Platz 3</h4>
+                    ${createMatchBox(fin[0], true)}
+                    <h4 style="margin: 25px 0 5px 0; color:#888;">Spiel um Platz 3</h4>
                     ${createMatchBox(p3[0])}
                  </div>`;
 
         // RECHTE SPALTE (HF)
         html += `<div class="bracket-col"><h3 style="text-align:center; color:#888;">Halbfinale</h3>
-                 ${createMatchBox(hf[1])}</div>`;
+                 <div class="match-wrapper center">${createMatchBox(hf[1])}</div></div>`;
 
         // RECHTE SPALTE (VF)
         if(currentState.bracket.size === 8) {
             html += `<div class="bracket-col"><h3 style="text-align:center; color:#888;">Viertelfinale</h3>
-                     ${createMatchBox(vf[2])} ${createMatchBox(vf[3])}</div>`;
+                     <div class="match-wrapper space-around">${createMatchBox(vf[2])} ${createMatchBox(vf[3])}</div></div>`;
         }
 
         document.getElementById('bracket-content').innerHTML = html;
     }
 
+    // Baut das 3D Sieger-Treppchen mit dynamischer Farbe
     function renderSiegerehrung() {
-        // Sammle Finalisten
         let fin = getMatchesFromHistory('Finale')[0]; let p3 = getMatchesFromHistory('Platz 3')[0];
-        let first, second, third, fourth;
+        let first, second, third;
         
         if(fin && fin.score1 !== null) {
             first = fin.score1 > fin.score2 ? fin.t1 : fin.t2; second = fin.score1 < fin.score2 ? fin.t1 : fin.t2;
         }
         if(p3 && p3.score1 !== null) {
-            third = p3.score1 > p3.score2 ? p3.t1 : p3.t2; fourth = p3.score1 < p3.score2 ? p3.t1 : p3.t2;
+            third = p3.score1 > p3.score2 ? p3.t1 : p3.t2;
         }
 
         let html = '';
         if(first && second && third) {
-            // DAS 3D TREPPCHEN
             html = `
             <div class="podium-container">
-                <div class="podium-step step-2">
-                    <div class="podium-team"><span class="badge" style="background:${second.color}"></span>${second.name}</div>
-                    🥈 2.
+                <div class="podium-step step-2" style="background-color: ${second.color};">
+                    <div class="podium-team-label"><span class="badge" style="background:${second.color}; border: 1px solid #ccc; width:10px; height:10px; margin-right:5px;"></span>${second.name}</div>
+                    <div style="margin-top:auto; margin-bottom: 20px; font-size:2em; text-shadow: 0 2px 4px rgba(0,0,0,0.3);">🥈 2.</div>
                 </div>
-                <div class="podium-step step-1">
-                    <div class="podium-team"><span class="badge" style="background:${first.color}"></span>${first.name}</div>
-                    🥇 1.
+                <div class="podium-step step-1" style="background-color: ${first.color};">
+                    <div class="podium-team-label"><span class="badge" style="background:${first.color}; border: 1px solid #ccc; width:10px; height:10px; margin-right:5px;"></span>${first.name}</div>
+                    <div style="margin-top:auto; margin-bottom: 30px; font-size:2.5em; text-shadow: 0 2px 4px rgba(0,0,0,0.3);">🥇 1.</div>
                 </div>
-                <div class="podium-step step-3">
-                    <div class="podium-team"><span class="badge" style="background:${third.color}"></span>${third.name}</div>
-                    🥉 3.
+                <div class="podium-step step-3" style="background-color: ${third.color};">
+                    <div class="podium-team-label"><span class="badge" style="background:${third.color}; border: 1px solid #ccc; width:10px; height:10px; margin-right:5px;"></span>${third.name}</div>
+                    <div style="margin-top:auto; margin-bottom: 10px; font-size:2em; text-shadow: 0 2px 4px rgba(0,0,0,0.3);">🥉 3.</div>
                 </div>
             </div>`;
         } else {
