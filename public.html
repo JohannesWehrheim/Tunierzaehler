@@ -29,19 +29,16 @@
         .badge { display: inline-block; width: 20px; height: 20px; border-radius: 50%; margin-right: 12px; vertical-align: middle; border: 2px solid rgba(0,0,0,0.1); flex-shrink: 0; }
         
         /* BRACKET STYLING */
-        .bracket-container { display: flex; justify-content: center; align-items: stretch; width: 100%; gap: 15px; padding: 20px 0; height: 500px; }
-        .bracket-col { display: flex; flex-direction: column; width: 22%; }
-        .match-wrapper { flex-grow: 1; display: flex; flex-direction: column; }
-        .match-wrapper.space-around { justify-content: space-around; }
-        .match-wrapper.center { justify-content: center; }
-        .center-col { width: 25%; align-items: center; justify-content: center; background: rgba(0,86,179,0.03); border-radius: 12px; padding: 20px; border: 2px dashed #0056b3; }
-        .match-box { background: white; border-radius: 6px; border: 2px solid #ccc; padding: 10px; display: flex; flex-direction: column; position: relative; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
-        .finale-box { border: 3px solid #f1c40f; box-shadow: 0 0 20px rgba(241,196,15,0.4); transform: scale(1.05); z-index: 10; }
-        .empty-match { opacity: 0.5; border-style: dashed; justify-content: center; align-items: center; font-style: italic; color: #888; height: 80px; }
-        .team-line { display: flex; justify-content: space-between; align-items: center; padding: 5px; font-weight: bold; font-size: 1.1em; border-radius: 4px; }
+        .bracket-container { display: flex; justify-content: center; align-items: stretch; width: 100%; gap: 10px; padding: 20px 0; height: 550px; }
+        .bracket-col { display: flex; flex-direction: column; flex: 1; justify-content: space-around; }
+        .center-col { flex: 1.2; align-items: center; justify-content: center; background: rgba(0,86,179,0.03); border-radius: 12px; padding: 10px; border: 2px dashed #0056b3; }
+        .match-box { background: white; border-radius: 6px; border: 2px solid #ccc; padding: 8px; display: flex; flex-direction: column; position: relative; box-shadow: 0 4px 8px rgba(0,0,0,0.05); margin: 5px 0; font-size: 0.9em; }
+        .finale-box { border: 3px solid #f1c40f; box-shadow: 0 0 20px rgba(241,196,15,0.4); transform: scale(1.05); z-index: 10; font-size: 1.1em; padding: 15px; }
+        .empty-match { opacity: 0.5; border-style: dashed; justify-content: center; align-items: center; font-style: italic; color: #888; height: 60px; }
+        .team-line { display: flex; justify-content: space-between; align-items: center; padding: 4px; font-weight: bold; border-radius: 4px; }
         .team-winner { background: #d4edda; color: #155724; }
         .team-loser { opacity: 0.4; text-decoration: line-through; }
-        .score-box { background: rgba(0,0,0,0.08); padding: 2px 8px; border-radius: 4px; min-width: 25px; text-align: center; color: #333; font-family: monospace; font-size: 1.1em; margin-left: 10px; }
+        .score-box { background: rgba(0,0,0,0.08); padding: 2px 6px; border-radius: 4px; min-width: 20px; text-align: center; color: #333; font-family: monospace; margin-left: 5px; }
         
         /* GIGANTISCHES PODIUM STYLING */
         #finished-phase { padding: 20px; display: flex; flex-direction: column; justify-content: space-between; align-items: center; height: 100vh; }
@@ -54,25 +51,12 @@
         .truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         
         #waiting-screen { display: flex; justify-content: center; align-items: center; height: 100vh; font-size: 3em; color: #666; font-weight: bold; }
-        
-        /* Modal für Münzwurf Overlay */
-        #coin-toss-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 2000; flex-direction: column; justify-content: center; align-items: center; color: white; }
-        .ct-box { font-size: 5vw; font-weight: bold; margin: 20px 0; display: flex; align-items: center; }
-        .ct-badge { width: 5vw; height: 5vw; border-radius: 50%; border: 4px solid white; margin-right: 20px; }
     </style>
 </head>
 <body>
 
 <audio id="horn-sound" src="sound.mp3" preload="auto"></audio>
 <div id="waiting-screen">Warte auf Verbindung zum Turnierleiter...</div>
-
-<div id="coin-toss-overlay">
-    <h1 style="color: #dc3545; font-size: 6vw; text-transform: uppercase; margin-bottom: 20px; text-shadow: 0 4px 10px rgba(0,0,0,0.5);">⚠️ Exakter Gleichstand ⚠️</h1>
-    <h3 style="font-size: 3vw; font-weight: normal; margin-bottom: 50px;">Münzwurf Entscheidung durch Turnierleitung!</h3>
-    <div class="ct-box" id="ct-team1"></div>
-    <div style="font-size: 3vw; opacity: 0.5;">vs</div>
-    <div class="ct-box" id="ct-team2"></div>
-</div>
 
 <div id="active-phase" class="view">
     <div id="round-title">Aktuelle Spiele</div>
@@ -104,26 +88,17 @@
     const bc = new BroadcastChannel('tournament_channel');
     let currentState = null;
 
-    // HANDSHAKE: Beim Öffnen sofort nach Daten fragen
     window.onload = () => { bc.postMessage({ type: 'REQUEST_STATE' }); };
 
     bc.onmessage = (event) => {
         if(event.data.type === 'STATE_UPDATE') { currentState = event.data.state; render(); }
         if(event.data.type === 'TIMER_TICK') updateTimerDisplay(event.data.time);
-        if(event.data.type === 'COIN_TOSS_START') showCoinToss(event.data.tie);
-        if(event.data.type === 'COIN_TOSS_END') document.getElementById('coin-toss-overlay').style.display = 'none';
         if(event.data.type === 'HORN') { 
             document.body.style.backgroundColor = "#ffc107"; 
             document.getElementById('horn-sound').play().catch(()=>{});
             setTimeout(() => document.body.style.backgroundColor = "var(--bg)", 1000); 
         }
     };
-
-    function showCoinToss(tie) {
-        document.getElementById('ct-team1').innerHTML = `<div class="ct-badge" style="background:${tie.t1.color}"></div> ${tie.t1.name}`;
-        document.getElementById('ct-team2').innerHTML = `<div class="ct-badge" style="background:${tie.t2.color}"></div> ${tie.t2.name}`;
-        document.getElementById('coin-toss-overlay').style.display = 'flex';
-    }
 
     function updateTimerDisplay(seconds) {
         let m = Math.floor(seconds / 60).toString().padStart(2, '0'); let s = (seconds % 60).toString().padStart(2, '0');
@@ -224,15 +199,15 @@
         
         return `<div class="match-box ${finClass}">
             <div class="team-line ${w1}">
-                <div style="display:flex; align-items:center; overflow:hidden; padding-right: 10px;">
-                    <span class="badge" style="background:${m.t1.color}"></span><span class="truncate" style="max-width: 100px;">${m.t1.name}</span>
+                <div style="display:flex; align-items:center; overflow:hidden; padding-right: 5px;">
+                    <span class="badge" style="background:${m.t1.color}"></span><span class="truncate" style="max-width: 90px;">${m.t1.name}</span>
                 </div>
                 <div class="score-box">${s1}</div>
             </div>
             <div style="border-top:1px solid var(--border); margin: 3px 0;"></div>
             <div class="team-line ${w2}">
-                <div style="display:flex; align-items:center; overflow:hidden; padding-right: 10px;">
-                    <span class="badge" style="background:${m.t2.color}"></span><span class="truncate" style="max-width: 100px;">${m.t2.name}</span>
+                <div style="display:flex; align-items:center; overflow:hidden; padding-right: 5px;">
+                    <span class="badge" style="background:${m.t2.color}"></span><span class="truncate" style="max-width: 90px;">${m.t2.name}</span>
                 </div>
                 <div class="score-box">${s2}</div>
             </div>
@@ -242,43 +217,55 @@
     function renderBracket() {
         if(!currentState.bracket) return;
         let html = '';
-        let vf = getMatchesFromHistory('Viertelfinale'); let zr = getMatchesFromHistory('Zwischenrunde');
-        let hf = getMatchesFromHistory('Halbfinale'); 
+        let zr = getMatchesFromHistory('Zwischenrunde'); let af = getMatchesFromHistory('Achtelfinale');
+        let vf = getMatchesFromHistory('Viertelfinale'); let hf = getMatchesFromHistory('Halbfinale'); 
         let fin = getMatchesFromHistory('Finale'); let p3 = getMatchesFromHistory('Platz 3');
 
-        // LINKE SPALTE
-        if(currentState.bracket.size === 8 || currentState.bracket.size === 6) {
-            let title = currentState.bracket.size === 6 ? 'Play-Offs' : 'Viertelfinale';
-            let m1 = currentState.bracket.size === 6 ? zr[0] : vf[0];
-            let m2 = currentState.bracket.size === 6 ? null : vf[1]; // Symmetrisch: Platz 1 Rechts
-            
-            html += `<div class="bracket-col"><h3 style="text-align:center; color:#888;">${title}</h3>
-                     <div class="match-wrapper space-around">${createMatchBox(m1)} ${currentState.bracket.size===8 ? createMatchBox(m2) : ''}</div></div>`;
+        // GANZ LINKS (Achtelfinale oder Play-Offs)
+        if(currentState.bracket.size === 16 || currentState.bracket.byes > 0) {
+            let title = currentState.bracket.size === 16 ? 'Achtelfinale' : 'Zwischenrunde';
+            let src = currentState.bracket.size === 16 ? af : zr;
+            html += `<div class="bracket-col"><h3 style="text-align:center; color:#888; font-size:1em;">${title}</h3>`;
+            for(let i=0; i<src.length/2; i++) html += createMatchBox(src[i]);
+            html += `</div>`;
+        }
+
+        // LINKS (Viertelfinale)
+        if(currentState.bracket.size >= 8) {
+            html += `<div class="bracket-col"><h3 style="text-align:center; color:#888; font-size:1em;">Viertelfinale</h3><div class="match-wrapper space-around">`;
+            html += createMatchBox(vf[0]) + createMatchBox(vf[1]);
+            html += `</div></div>`;
         }
         
         // HALBFINALE LINKS
-        html += `<div class="bracket-col"><h3 style="text-align:center; color:#888;">Halbfinale</h3>
+        html += `<div class="bracket-col"><h3 style="text-align:center; color:#888; font-size:1em;">Halbfinale</h3>
                  <div class="match-wrapper center">${createMatchBox(hf[0])}</div></div>`;
 
         // MITTE (FINALE & P3)
-        html += `<div class="bracket-col center-col">
+        html += `<div class="bracket-col center-col" style="flex: 1.5;">
                     <h2 style="margin:0 0 10px 0; color:var(--primary); font-size:2em;">🏆 Finale</h2>
                     ${createMatchBox(fin[0], true)}
                     ${p3.length > 0 ? `<h4 style="margin: 25px 0 5px 0; color:#888;">Spiel um Platz 3</h4>${createMatchBox(p3[0])}` : ''}
                  </div>`;
 
         // HALBFINALE RECHTS
-        html += `<div class="bracket-col"><h3 style="text-align:center; color:#888;">Halbfinale</h3>
+        html += `<div class="bracket-col"><h3 style="text-align:center; color:#888; font-size:1em;">Halbfinale</h3>
                  <div class="match-wrapper center">${createMatchBox(hf[1])}</div></div>`;
 
-        // RECHTE SPALTE
-        if(currentState.bracket.size === 8 || currentState.bracket.size === 6) {
-            let title = currentState.bracket.size === 6 ? 'Play-Offs' : 'Viertelfinale';
-            let m1 = currentState.bracket.size === 6 ? zr[1] : vf[2]; // Symmetrisch
-            let m2 = currentState.bracket.size === 6 ? null : vf[3];
-            
-            html += `<div class="bracket-col"><h3 style="text-align:center; color:#888;">${title}</h3>
-                     <div class="match-wrapper space-around">${createMatchBox(m1)} ${currentState.bracket.size===8 ? createMatchBox(m2) : ''}</div></div>`;
+        // RECHTS (Viertelfinale)
+        if(currentState.bracket.size >= 8) {
+            html += `<div class="bracket-col"><h3 style="text-align:center; color:#888; font-size:1em;">Viertelfinale</h3><div class="match-wrapper space-around">`;
+            html += createMatchBox(vf[2]) + createMatchBox(vf[3]);
+            html += `</div></div>`;
+        }
+
+        // GANZ RECHTS (Achtelfinale oder Play-Offs)
+        if(currentState.bracket.size === 16 || currentState.bracket.byes > 0) {
+            let title = currentState.bracket.size === 16 ? 'Achtelfinale' : 'Zwischenrunde';
+            let src = currentState.bracket.size === 16 ? af : zr;
+            html += `<div class="bracket-col"><h3 style="text-align:center; color:#888; font-size:1em;">${title}</h3>`;
+            for(let i=src.length/2; i<src.length; i++) html += createMatchBox(src[i]);
+            html += `</div>`;
         }
 
         document.getElementById('bracket-content').innerHTML = html;
