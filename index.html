@@ -12,8 +12,10 @@
         button { background: var(--primary); color: #fff; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer; font-weight: bold; margin: 5px; transition: 0.2s; }
         button:hover { opacity: 0.8; }
         .btn-red { background: var(--red); } .btn-green { background: var(--green); } .btn-grey { background: var(--grey); }
-        input, select { padding: 10px; margin: 5px; border-radius: 6px; border: 1px solid var(--border); }
+        input[type=number], input[type=text], select { padding: 10px; margin: 5px; border-radius: 6px; border: 1px solid var(--border); }
         .team-row { display: flex; gap: 10px; margin-bottom: 10px; align-items: center; }
+        input[type=color] { padding: 0; width: 35px; height: 35px; border: none; border-radius: 50%; cursor: pointer; background: transparent; }
+        input[type=color]::-webkit-color-swatch-wrapper { padding: 0; } input[type=color]::-webkit-color-swatch { border: 2px solid var(--border); border-radius: 50%; }
         #dashboard { display: none; }
         .match-card { background: var(--bg); padding: 15px; margin-bottom: 10px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--border); }
         .match-inputs input { width: 50px; text-align: center; font-size: 1.2em; font-weight: bold; }
@@ -24,10 +26,10 @@
         input[type=range] { width: 100%; margin: 15px 0; cursor: pointer; }
         .truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px; display: inline-block; vertical-align: middle; }
         
-        /* Modal für Münzwurf */
         #coin-toss-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; justify-content: center; align-items: center; }
-        .modal-content { background: white; padding: 30px; border-radius: 12px; text-align: center; max-width: 400px; width: 90%; }
+        .modal-content { background: white; padding: 30px; border-radius: 12px; text-align: center; max-width: 500px; width: 90%; }
         .modal-btn { display: block; width: 100%; margin: 10px 0; padding: 15px; font-size: 1.2em; }
+        .ct-team-box { display: flex; align-items: center; justify-content: center; font-size: 1.5em; font-weight: bold; margin: 20px 0; }
     </style>
 </head>
 <body>
@@ -36,8 +38,8 @@
 
 <div id="coin-toss-modal">
     <div class="modal-content">
-        <h2 style="color:var(--red);">⚠️ Exakter Gleichstand!</h2>
-        <p>Punkte, Differenz und direkter Vergleich sind absolut identisch. Wer gewinnt den Münzwurf und zieht vorbei?</p>
+        <h2 style="color:var(--red); font-size: 2em; margin-bottom: 10px;">⚠️ EXAKTER GLEICHSTAND</h2>
+        <p>Punkte, Differenz und direkter Vergleich sind identisch! Klicke auf das Team, das den Münzwurf gewinnt.</p>
         <div id="coin-toss-buttons"></div>
     </div>
 </div>
@@ -110,17 +112,13 @@
 </div>
 
 <script>
-    const COLORS = ['#FF4136', '#2ECC40', '#0074D9', '#B10DC9', '#39CCCC', '#FF851B', '#F012BE', '#01FF70', '#85144b', '#FFDC00', '#7FDBFF', '#3D9970', '#001f3f', '#aaaaaa', '#ffb6c1', '#20b2aa', '#ffa07a', '#ff69b4', '#4682b4', '#9acd32'];
+    const DEFAULT_COLORS = ['#FF4136', '#2ECC40', '#0074D9', '#B10DC9', '#39CCCC', '#FF851B', '#F012BE', '#01FF70', '#85144b', '#FFDC00', '#7FDBFF', '#3D9970', '#001f3f', '#aaaaaa', '#ffb6c1', '#20b2aa', '#ffa07a', '#ff69b4', '#4682b4', '#9acd32'];
     let state = { teams: [], groups: [], timeslots: [], currentSlot: 0, phase: 'pause', stage: 'groups', bracket: null, waitingTeams: [], p3Teams: null, timeRemaining: 720, defaultTime: 720, isTimerRunning: false, numFields: 2 };
-    let tieBreakerQueue = [];
     
     const bc = new BroadcastChannel('tournament_channel');
     let timerInterval;
 
-    // ZWEI-WEGE-HANDSHAKE FÜR DEN BEAMER
-    bc.onmessage = (event) => {
-        if(event.data.type === 'REQUEST_STATE') broadcastState();
-    };
+    bc.onmessage = (event) => { if(event.data.type === 'REQUEST_STATE') broadcastState(); };
 
     window.onload = () => { if(localStorage.getItem('tourney_state')) document.getElementById('resume-box').style.display = 'block'; syncTeamCount(8); };
     function saveState() { localStorage.setItem('tourney_state', JSON.stringify(state)); broadcastState(); }
@@ -144,7 +142,10 @@
         if (targetCount > currentRows) {
             for(let i = currentRows; i < targetCount; i++) {
                 let div = document.createElement('div'); div.className = 'team-row';
-                div.innerHTML = `<span style="width: 25px; color: #888; font-weight: bold;">${i+1}.</span><input type="text" class="team-input" placeholder="Team Name" maxlength="20" value="Team ${i+1}" style="flex-grow: 1;" onchange="updateForecast()"><button onclick="removeTeam(this)" class="btn-red">X</button>`;
+                div.innerHTML = `<span style="width: 25px; color: #888; font-weight: bold;">${i+1}.</span>
+                                 <input type="color" class="team-color" value="${DEFAULT_COLORS[i % DEFAULT_COLORS.length]}">
+                                 <input type="text" class="team-input" placeholder="Team Name" maxlength="20" value="Team ${i+1}" style="flex-grow: 1;" onchange="updateForecast()">
+                                 <button onclick="removeTeam(this)" class="btn-red">X</button>`;
                 container.appendChild(div);
             }
         } else if (targetCount < currentRows) {
@@ -161,27 +162,22 @@
         let pTime = parseInt(document.getElementById('pause-time').value) || 3;
 
         let numGroups = Math.ceil(teamsCount / maxGrp);
-        let baseSize = Math.floor(teamsCount / numGroups);
-        let remainder = teamsCount % numGroups;
-        
+        let baseSize = Math.floor(teamsCount / numGroups); let remainder = teamsCount % numGroups;
         let totalMatches = 0;
-        for(let i=0; i<numGroups; i++) {
-            let size = baseSize + (i < remainder ? 1 : 0);
-            totalMatches += (size * (size - 1)) / 2;
-        }
+        for(let i=0; i<numGroups; i++) { let size = baseSize + (i < remainder ? 1 : 0); totalMatches += (size * (size - 1)) / 2; }
 
         let slots = Math.ceil(totalMatches / fields);
         let totalMins = slots * (mTime + pTime);
         let now = new Date(); now.setMinutes(now.getMinutes() + totalMins);
         let endTime = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-
         document.getElementById('forecast-display').innerHTML = `<strong>Prognose (Nur Gruppenphase):</strong><br>${numGroups} Gruppen | ${totalMatches} Spiele gesamt | ${slots} Runden<br>Dauer: ca. ${Math.floor(totalMins/60)}h ${totalMins%60}min -> <strong>Ende ca. ${endTime} Uhr</strong>`;
     }
 
-    // --- NEUER VERBESSERTER SCHEDULER (Verzahnung & Gruppen-Trennung) ---
     function startTournament() {
-        const inputs = document.querySelectorAll('.team-input'); let teams = [];
-        inputs.forEach((input, i) => { if(input.value.trim() !== '') teams.push({ id: i, name: input.value.trim(), color: COLORS[i % COLORS.length], points: 0, diff: 0, played: 0 }); });
+        const inputs = document.querySelectorAll('.team-input'); 
+        const colors = document.querySelectorAll('.team-color');
+        let teams = [];
+        inputs.forEach((input, i) => { if(input.value.trim() !== '') teams.push({ id: i, name: input.value.trim(), color: colors[i].value, points: 0, diff: 0, played: 0 }); });
 
         state.numFields = parseInt(document.getElementById('num-fields').value);
         let maxGroupSize = parseInt(document.getElementById('max-group-size').value);
@@ -201,37 +197,34 @@
         state.timeslots = [];
         let teamLastPlayed = {}; teams.forEach(t => teamLastPlayed[t.id] = -99);
 
+        // SCHEDULER UPDATE: Tiefgreifendes Mischen basierend auf Wartezeit
         while(allMatches.length > 0) {
-            let slot = { matches: [] };
-            let slotTeams = new Set();
-            let slotGroups = new Set();
+            let slot = { matches: [] }; let slotTeams = new Set(); let slotGroups = new Set();
 
-            // 3 Durchläufe mit abnehmender Strenge, um das Feld voll zu bekommen
+            allMatches.sort((a, b) => {
+                let waitA = Math.min(state.timeslots.length - teamLastPlayed[a.t1.id], state.timeslots.length - teamLastPlayed[a.t2.id]);
+                let waitB = Math.min(state.timeslots.length - teamLastPlayed[b.t1.id], state.timeslots.length - teamLastPlayed[b.t2.id]);
+                return waitB - waitA; // Höchste Wartezeit zuerst!
+            });
+
             for (let strictness = 0; strictness <= 2; strictness++) {
                 let i = 0;
                 while (i < allMatches.length && slot.matches.length < state.numFields) {
                     let m = allMatches[i];
-                    let teamOverlap = slotTeams.has(m.t1.id) || slotTeams.has(m.t2.id);
-                    if (teamOverlap) { i++; continue; }
-
+                    if (slotTeams.has(m.t1.id) || slotTeams.has(m.t2.id)) { i++; continue; }
                     let groupOverlap = slotGroups.has(m.groupIdx);
                     let backToBack = (teamLastPlayed[m.t1.id] === state.timeslots.length - 1) || (teamLastPlayed[m.t2.id] === state.timeslots.length - 1);
 
-                    // Strict 0: Perfekte Welt (keine gleiche Gruppe, kein back-to-back)
                     if (strictness === 0 && (groupOverlap || backToBack)) { i++; continue; }
-                    // Strict 1: Erlaube back-to-back, aber Gruppen trennen
-                    if (strictness === 1 && groupOverlap) { i++; continue; }
-                    // Strict 2: Nimm was da ist (am Ende unvermeidbar)
+                    if (strictness === 1 && backToBack) { i++; continue; } 
 
                     slot.matches.push(m);
-                    slotTeams.add(m.t1.id); slotTeams.add(m.t2.id);
-                    slotGroups.add(m.groupIdx);
+                    slotTeams.add(m.t1.id); slotTeams.add(m.t2.id); slotGroups.add(m.groupIdx);
                     teamLastPlayed[m.t1.id] = state.timeslots.length; teamLastPlayed[m.t2.id] = state.timeslots.length;
                     allMatches.splice(i, 1);
                 }
             }
-            if(slot.matches.length > 0) state.timeslots.push(slot);
-            else break; // Fallback
+            if(slot.matches.length > 0) state.timeslots.push(slot); else break;
         }
         
         let mTime = parseInt(document.getElementById('match-time').value) || 12;
@@ -246,7 +239,7 @@
 
     function backToSetup() { if(confirm("Wirklich zurück zum Setup? Alle Ergebnisse gehen verloren!")) { clearStorage(); location.reload(); } }
 
-    // --- NEU: DIREKTER VERGLEICH & MÜNZWURF ---
+    // --- MÜNZWURF & TIE BREAKER ---
     function getH2HWinner(t1, t2) {
         for(let slot of state.timeslots) {
             for(let m of slot.matches) {
@@ -254,45 +247,43 @@
                     if((m.t1.id === t1.id && m.t2.id === t2.id) || (m.t1.id === t2.id && m.t2.id === t1.id)) {
                         if(m.score1 > m.score2) return m.t1.id === t1.id ? 1 : -1;
                         if(m.score2 > m.score1) return m.t2.id === t1.id ? 1 : -1;
-                        return 0; // Unentschieden im H2H
                     }
                 }
             }
         }
-        return 0; // Haben nicht gegeneinander gespielt
+        return 0;
     }
 
     function sortTeamsStrict(teamsArr) {
-        tieBreakerQueue = [];
+        let needCoinToss = null;
         teamsArr.sort((a, b) => {
             if (b.points !== a.points) return b.points - a.points;
             if (b.diff !== a.diff) return b.diff - a.diff;
             let h2h = getH2HWinner(a, b);
-            if (h2h !== 0) return h2h; // 1 oder -1
-            tieBreakerQueue.push({t1: a, t2: b});
-            return 0;
+            if (h2h !== 0) return h2h; 
+            needCoinToss = {t1: a, t2: b}; return 0;
         });
-        return teamsArr;
+        return { sorted: teamsArr, tie: needCoinToss };
     }
 
-    function handleCoinTossQueue(callback) {
-        if(tieBreakerQueue.length === 0) { callback(); return; }
-        
-        let tie = tieBreakerQueue.shift(); // Hole den ersten Gleichstand
+    function showCoinToss(tie) {
+        bc.postMessage({ type: 'COIN_TOSS_START', tie: tie });
         document.getElementById('coin-toss-modal').style.display = 'flex';
         document.getElementById('coin-toss-buttons').innerHTML = `
-            <button class="btn-green modal-btn" onclick="resolveCoinToss(${tie.t1.id}, '${callback.name}')">${tie.t1.name} gewinnt den Münzwurf!</button>
-            <button class="btn-green modal-btn" onclick="resolveCoinToss(${tie.t2.id}, '${callback.name}')">${tie.t2.name} gewinnt den Münzwurf!</button>
+            <div class="ct-team-box"><span class="badge" style="background:${tie.t1.color}"></span> ${tie.t1.name}</div>
+            <button class="btn-green modal-btn" onclick="resolveCoinToss(${tie.t1.id})">Gewinnt Münzwurf!</button>
+            <hr style="margin: 20px 0; border: 1px solid #eee;">
+            <div class="ct-team-box"><span class="badge" style="background:${tie.t2.color}"></span> ${tie.t2.name}</div>
+            <button class="btn-green modal-btn" onclick="resolveCoinToss(${tie.t2.id})">Gewinnt Münzwurf!</button>
         `;
     }
 
-    function resolveCoinToss(winnerId, callbackName) {
+    function resolveCoinToss(winnerId) {
         let team = state.teams.find(t => t.id === winnerId);
-        team.points += 0.01; // Unsichtbarer Siegespunkt
+        team.points += 0.01; 
         document.getElementById('coin-toss-modal').style.display = 'none';
-        
-        if(callbackName === 'prepareKO') prepareKO();
-        else if(callbackName === 'advanceKO') advanceKO();
+        bc.postMessage({ type: 'COIN_TOSS_END' });
+        prepareKO(); // Versuch es erneut
     }
 
     function prepareKO() {
@@ -302,27 +293,30 @@
         
         let advancingTeams = [];
         for(let i=0; i<state.groups.length; i++) {
-            let sortedGrp = sortTeamsStrict([...state.groups[i]].map(t => state.teams.find(st => st.id === t.id)));
-            if(tieBreakerQueue.length > 0) { handleCoinTossQueue(prepareKO); return; } // Abbruch für Münzwurf!
-            advancingTeams.push(...sortedGrp.slice(0, adv));
+            let res = sortTeamsStrict([...state.groups[i]].map(t => state.teams.find(st => st.id === t.id)));
+            if(res.tie) { showCoinToss(res.tie); return; } // Stoppt falls Gleichstand
+            advancingTeams.push(...res.sorted.slice(0, adv));
         }
 
-        let overall = sortTeamsStrict([...state.teams]);
-        if(tieBreakerQueue.length > 0) { handleCoinTossQueue(prepareKO); return; } // Abbruch für Münzwurf!
+        let overallRes = sortTeamsStrict([...state.teams]);
+        if(overallRes.tie) { showCoinToss(overallRes.tie); return; } // Stoppt falls Gleichstand
+        let overall = overallRes.sorted;
 
         while(advancingTeams.length < bracketSize) {
             let nextBest = overall.find(t => !advancingTeams.includes(t));
             if(nextBest) advancingTeams.push(nextBest); else break;
         }
         advancingTeams = advancingTeams.slice(0, bracketSize);
-        advancingTeams = sortTeamsStrict(advancingTeams); // Finale Sortierung der Setzliste
+        
+        let finalSort = sortTeamsStrict(advancingTeams);
+        if(finalSort.tie) { showCoinToss(finalSort.tie); return; }
+        advancingTeams = finalSort.sorted;
 
         state.stage = 'ko'; state.waitingTeams = []; let matches = []; let roundName = "";
 
-        // SONDERFALL: 6 Teams
         if (state.groups.length === 2 && adv === 3) {
             roundName = "Zwischenrunde";
-            state.waitingTeams = [advancingTeams[0], advancingTeams[1]]; // Die 2 Besten warten
+            state.waitingTeams = [advancingTeams[0], advancingTeams[1]]; 
             matches.push({t1: advancingTeams[2], t2: advancingTeams[5], score1: null, score2: null, isKO: true, koRound: roundName});
             matches.push({t1: advancingTeams[3], t2: advancingTeams[4], score1: null, score2: null, isKO: true, koRound: roundName});
             state.bracket = { size: 6, teams: advancingTeams };
@@ -331,6 +325,11 @@
             let seeds = bracketSize === 8 ? [0,7, 3,4, 2,5, 1,6] : (bracketSize === 4 ? [0,3, 1,2] : [0,1]);
             for(let i=0; i<bracketSize; i+=2) {
                 matches.push({t1: advancingTeams[seeds[i]], t2: advancingTeams[seeds[i+1]], score1: null, score2: null, isKO: true, koRound: roundName});
+            }
+            
+            // SYMMETRISCHES UMSORTIEREN FÜR 8 TEAMS (Links, Rechts, Links, Rechts)
+            if(bracketSize === 8 && matches.length === 4) {
+                matches = [matches[0], matches[2], matches[1], matches[3]];
             }
             state.bracket = { size: bracketSize, teams: advancingTeams };
         }
@@ -345,10 +344,7 @@
         saveState(); updateAdminView();
     }
 
-    function advanceKO() {
-        let lastMatch = state.timeslots[state.currentSlot - 1].matches[0];
-        let currentRoundName = lastMatch.koRound;
-        
+    function advanceKO(currentRoundName) {
         let lastRoundMatches = [];
         for(let i = state.currentSlot - 1; i >= 0; i--) {
             let slotMatches = state.timeslots[i].matches;
@@ -368,10 +364,9 @@
             state.waitingTeams = []; 
         } 
         else if(currentRoundName === 'Halbfinale') {
-            // TRENNUNG VON FINALE UND PLATZ 3 IN EIGENE RUNDEN!
             state.timeslots.push({ name: 'Spiel um Platz 3', matches: [{t1: losers[0], t2: losers[1], score1: null, score2: null, isKO: true, koRound: 'Platz 3'}] });
             state.timeslots.push({ name: 'Finale', matches: [{t1: winners[0], t2: winners[1], score1: null, score2: null, isKO: true, koRound: 'Finale'}] });
-            saveState(); updateAdminView(); return; // Direkt raus, da wir manuell gepushed haben
+            saveState(); updateAdminView(); return; 
         } 
         else {
             roundName = currentRoundName === 'Viertelfinale' ? 'Halbfinale' : 'Nächste Runde';
@@ -392,7 +387,7 @@
 
     function skipPlatz3() {
         if(!confirm("Spiel um Platz 3 wirklich überspringen?")) return;
-        state.timeslots.splice(state.currentSlot, 1); // Entfernt den Platz 3 Slot
+        state.timeslots.splice(state.currentSlot, 1); 
         saveState(); updateAdminView();
     }
 
@@ -412,12 +407,12 @@
                 if(lastMatch.koRound === 'Finale') {
                     roundHeader.innerHTML = "Turnier beendet!";
                     container.innerHTML = `<button onclick="state.stage='finished'; saveState();" class="btn-green" style="width: 100%; font-size: 1.2em; padding: 15px;">Siegerehrung auf Beamer starten 🏆</button>`;
-                } else if(lastMatch.koRound === 'Platz 3') { // Sollte nicht vorkommen, da Finale direkt danach ist, aber Safety first
+                } else if(lastMatch.koRound === 'Platz 3') { 
                     roundHeader.innerHTML = "Runde beendet!";
-                    container.innerHTML = `<button onclick="advanceKO()" class="btn-green" style="width: 100%; font-size: 1.2em; padding: 15px;">Zum Finale</button>`;
+                    container.innerHTML = `<button onclick="advanceKO('Platz 3')" class="btn-green" style="width: 100%; font-size: 1.2em; padding: 15px;">Zum Finale</button>`;
                 } else {
                     roundHeader.innerHTML = "Runde beendet!";
-                    container.innerHTML = `<button onclick="advanceKO()" class="btn-green" style="width: 100%; font-size: 1.2em; padding: 15px;">Nächste Runde aufbauen</button>`;
+                    container.innerHTML = `<button onclick="advanceKO('${lastMatch.koRound}')" class="btn-green" style="width: 100%; font-size: 1.2em; padding: 15px;">Nächste Runde aufbauen</button>`;
                 }
             }
             renderHistory(); return;
@@ -440,12 +435,10 @@
                 </div>`;
         });
 
-        // Überspringen Button für Platz 3
         if(slot.matches[0].koRound === 'Platz 3') {
             btnContainer.innerHTML = `<button onclick="skipPlatz3()" class="btn-red" style="width: 100%; padding: 10px; margin-bottom: 10px;">Dieses Spiel überspringen (Direkt zum Finale)</button>`;
         }
         btnContainer.innerHTML += `<button onclick="saveResults()" style="width: 100%; padding: 15px; font-size: 1.1em;" class="btn-green">💾 Ergebnisse speichern & Weiter</button>`;
-        
         renderHistory();
     }
 
@@ -463,45 +456,43 @@
                 if(s1 > s2) t1.points += 3; else if(s2 > s1) t2.points += 3; else { t1.points += 1; t2.points += 1; }
             }
         }
-        state.currentSlot++; state.phase = 'pause'; resetTimer(); updateAdminView(); saveState();
-    }
-
-    // --- DER BULLETPROOF RÜCKGÄNGIG BUTTON ---
-    function undoLastRound() {
-        if (state.currentSlot === 0 && state.stage === 'groups') return;
         
-        if (state.stage === 'finished') state.stage = 'ko'; // Aus Siegerehrung zurück
+        let roundName = slot.matches[0].koRound;
+        state.currentSlot++; state.phase = 'pause'; resetTimer(); 
         
-        // Sind wir am Anfang der KO-Runde (noch kein Spiel gespielt)? -> Ganzen Baum abreißen
-        if (state.stage === 'ko' && state.currentSlot > 0) {
-            let currMatch = state.timeslots[state.currentSlot] ? state.timeslots[state.currentSlot].matches[0] : null;
-            let prevMatch = state.timeslots[state.currentSlot - 1].matches[0];
-            
-            // Wenn wir am Startpunkt der KO stehen (oder der letzte Slot das erste KO Spiel war)
-            if (prevMatch.isKO && prevMatch.score1 === null) {
-                // Lösche alle KO Runden
-                for (let i = state.timeslots.length - 1; i >= 0; i--) {
-                    if (state.timeslots[i].matches[0].isKO) state.timeslots.splice(i, 1);
-                }
-                state.stage = 'groups'; state.bracket = null;
-                saveState(); updateAdminView(); return;
+        // AUTO-ADVANCE in K.O. Phase (Wenn keine Spiele dieser Runde mehr übrig sind)
+        if (state.stage === 'ko') {
+            let moreLeft = state.timeslots.slice(state.currentSlot).some(s => s.matches[0] && s.matches[0].koRound === roundName);
+            if (!moreLeft && roundName !== 'Finale' && roundName !== 'Platz 3') {
+                advanceKO(roundName); return; // return, weil advanceKO speichert und updatet
             }
         }
+        
+        saveState(); updateAdminView(); 
+    }
 
-        // Normaler Undo: Eine Runde zurückspringen und Punkte abziehen
+    function undoLastRound() {
+        if (state.currentSlot === 0 && state.stage === 'groups') return;
+        state.stage = state.stage === 'finished' ? 'ko' : state.stage;
+        
+        // Kahlschlag: Alle ungespielten Zukunftsslots (z.B. auto-generierte KO Runden) löschen
+        while (state.timeslots.length > state.currentSlot) state.timeslots.pop();
+
         state.currentSlot--; const slot = state.timeslots[state.currentSlot];
-        slot.matches.forEach(m => {
-            if (!m.isKO && m.score1 !== null) {
-                let t1 = state.teams.find(t => t.id === m.t1.id); let t2 = state.teams.find(t => t.id === m.t2.id);
-                t1.played--; t2.played--; t1.diff -= (m.score1 - m.score2); t2.diff -= (m.score2 - m.score1);
-                if(m.score1 > m.score2) t1.points -= 3; else if(m.score2 > m.score1) t2.points -= 3; else { t1.points -= 1; t2.points -= 1; }
-            }
-            m.score1 = null; m.score2 = null;
-        });
         
-        // Wenn wir durchs Undo zufällig wieder in die Gruppenphase fallen
-        if(state.currentSlot > 0 && !state.timeslots[state.currentSlot-1].matches[0].isKO && !slot.matches[0].isKO) state.stage = 'groups';
-        
+        if (slot.matches[0].isKO && slot.matches[0].score1 === null) {
+            state.timeslots.pop(); // Es war ein ungespielter KO-Start
+            if (state.currentSlot === 0 || !state.timeslots[state.currentSlot - 1].matches[0].isKO) state.stage = 'groups';
+        } else {
+            slot.matches.forEach(m => {
+                if (!m.isKO && m.score1 !== null) {
+                    let t1 = state.teams.find(t => t.id === m.t1.id); let t2 = state.teams.find(t => t.id === m.t2.id);
+                    t1.played--; t2.played--; t1.diff -= (m.score1 - m.score2); t2.diff -= (m.score2 - m.score1);
+                    if(m.score1 > m.score2) t1.points -= 3; else if(m.score2 > m.score1) t2.points -= 3; else { t1.points -= 1; t2.points -= 1; }
+                }
+                m.score1 = null; m.score2 = null;
+            });
+        }
         state.phase = 'pause'; saveState(); updateAdminView();
     }
 
