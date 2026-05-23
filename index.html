@@ -26,15 +26,23 @@
         input[type=range] { width: 100%; margin: 15px 0; cursor: pointer; }
         .truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px; display: inline-block; vertical-align: middle; }
         
-        /* Modals */
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; justify-content: center; align-items: center; }
         .modal-content { background: white; padding: 30px; border-radius: 12px; max-width: 500px; width: 90%; max-height: 80vh; overflow-y: auto; }
         .pt-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #eee; }
+        .ct-team-box { display: flex; align-items: center; justify-content: center; font-size: 1.5em; font-weight: bold; margin: 20px 0; }
     </style>
 </head>
 <body>
 
 <audio id="horn-sound" src="sound.mp3" preload="auto"></audio>
+
+<div id="coin-toss-modal" class="modal-overlay">
+    <div class="modal-content" style="text-align:center;">
+        <h2 style="color:var(--red); font-size: 2em; margin-bottom: 10px;">⚠️ EXAKTER GLEICHSTAND</h2>
+        <p>Quote (Punkte/Diff pro Spiel) und direkter Vergleich sind identisch! Wer gewinnt das Stechen?</p>
+        <div id="coin-toss-buttons"></div>
+    </div>
+</div>
 
 <div class="modal-overlay" id="points-modal">
     <div class="modal-content">
@@ -47,6 +55,7 @@
 
 <div class="container" id="setup-screen">
     <h1>Turnier Setup</h1>
+    <button onclick="window.open('public.html', '_blank')" class="btn-grey" style="width: 100%; margin-bottom: 20px;">📺 Public Display (Beamer) öffnen</button>
     
     <div id="resume-box" style="display:none; background: #d4edda; padding: 15px; border-radius: 8px; margin-bottom: 20px; text-align: center; border: 1px solid #c3e6cb;">
         <strong>Laufendes Turnier im Zwischenspeicher!</strong><br>
@@ -116,6 +125,7 @@
 <script>
     const DEFAULT_COLORS = ['#FF4136', '#2ECC40', '#0074D9', '#B10DC9', '#39CCCC', '#FF851B', '#F012BE', '#01FF70', '#85144b', '#FFDC00', '#7FDBFF', '#3D9970', '#001f3f', '#aaaaaa', '#ffb6c1', '#20b2aa', '#ffa07a', '#ff69b4', '#4682b4', '#9acd32'];
     let state = { teams: [], groups: [], timeslots: [], currentSlot: 0, phase: 'pause', stage: 'groups', bracket: null, waitingTeams: [], p3Teams: null, timeRemaining: 720, defaultTime: 720, isTimerRunning: false, numFields: 2 };
+    let tieBreakerQueue = [];
     
     const bc = new BroadcastChannel('tournament_channel');
     let timerInterval;
@@ -175,15 +185,13 @@
         document.getElementById('forecast-display').innerHTML = `<strong>Prognose (Gruppenphase):</strong><br>${numGroups} Gruppen | ${totalMatches} Spiele gesamt | ${slots} Runden<br>Dauer: ca. ${Math.floor(totalMins/60)}h ${totalMins%60}min -> <strong>Ende ca. ${endTime} Uhr</strong>`;
     }
 
-    // --- ZURÜCK ZUM SETUP (OHNE DATENVERLUST!) ---
     function backToSetup() {
         state.stage = 'setup'; state.timeslots = []; state.currentSlot = 0; state.bracket = null;
         document.getElementById('dashboard').style.display = 'none';
         document.getElementById('setup-screen').style.display = 'block';
-        document.getElementById('resume-box').style.display = 'none'; // Verstecken, da wir ja schon im Setup sind
+        document.getElementById('resume-box').style.display = 'none';
     }
 
-    // --- MANUELLE PUNKTE KORREKTUR ---
     function openPointsModal() {
         let html = '';
         let sorted = [...state.teams].sort((a,b) => b.points - a.points);
@@ -204,19 +212,16 @@
     function adjustPoints(id, amount) {
         let team = state.teams.find(t => t.id === id);
         team.points += amount;
-        saveState(); openPointsModal(); // Neu laden
+        saveState(); openPointsModal(); 
     }
 
     function startTournament() {
-        // Teams extrahieren (falls aus dem laufenden Setup neu gestartet wird)
         const inputs = document.querySelectorAll('.team-input'); const colors = document.querySelectorAll('.team-color');
         
-        // Nur Teams neu anlegen, wenn wir GANZ neu starten. Wenn wir aus "Zurück zum Setup" kommen, behalten wir IDs
         if(state.teams.length === 0 || state.teams.length !== inputs.length) {
             state.teams = [];
             inputs.forEach((input, i) => { if(input.value.trim() !== '') state.teams.push({ id: i, name: input.value.trim(), color: colors[i].value, points: 0, diff: 0, played: 0 }); });
         } else {
-            // Farben/Namen updaten, falls geändert
             inputs.forEach((input, i) => { state.teams[i].name = input.value.trim(); state.teams[i].color = colors[i].value; state.teams[i].points = 0; state.teams[i].diff = 0; state.teams[i].played = 0; });
         }
 
@@ -237,10 +242,8 @@
 
         state.timeslots = []; let teamLastPlayed = {}; state.teams.forEach(t => teamLastPlayed[t.id] = -99);
 
-        // SCHEDULER UPDATE: Tiefgreifendes Mischen basierend auf Wartezeit
         while(allMatches.length > 0) {
             let slot = { matches: [] }; let slotTeams = new Set(); let slotGroups = new Set();
-
             allMatches.sort((a, b) => {
                 let waitA = Math.min(state.timeslots.length - teamLastPlayed[a.t1.id], state.timeslots.length - teamLastPlayed[a.t2.id]);
                 let waitB = Math.min(state.timeslots.length - teamLastPlayed[b.t1.id], state.timeslots.length - teamLastPlayed[b.t2.id]);
@@ -277,33 +280,88 @@
         updateAdminView();
     }
 
-    // --- NEUE DYNAMISCHE K.O. GENERIERUNG (Freilose berechnen) ---
+    // --- NEU: QUOTIENTEN-SORTIERUNG (PPG) ---
+    function getH2HWinner(t1, t2) {
+        for(let slot of state.timeslots) {
+            for(let m of slot.matches) {
+                if(!m.isKO && m.score1 !== null) {
+                    if((m.t1.id === t1.id && m.t2.id === t2.id) || (m.t1.id === t2.id && m.t2.id === t1.id)) {
+                        if(m.score1 > m.score2) return m.t1.id === t1.id ? 1 : -1;
+                        if(m.score2 > m.score1) return m.t2.id === t1.id ? 1 : -1;
+                    }
+                }
+            }
+        }
+        return 0;
+    }
+
+    function sortTeamsStrict(teamsArr, usePPG = false) {
+        let needCoinToss = null;
+        teamsArr.sort((a, b) => {
+            let pA = usePPG ? (a.played > 0 ? a.points/a.played : 0) : a.points;
+            let pB = usePPG ? (b.played > 0 ? b.points/b.played : 0) : b.points;
+            if (pB !== pA) return pB - pA;
+            
+            let dA = usePPG ? (a.played > 0 ? a.diff/a.played : 0) : a.diff;
+            let dB = usePPG ? (b.played > 0 ? b.diff/b.played : 0) : b.diff;
+            if (dB !== dA) return dB - dA;
+
+            let h2h = getH2HWinner(a, b);
+            if (h2h !== 0) return h2h; 
+            needCoinToss = {t1: a, t2: b}; return 0;
+        });
+        return { sorted: teamsArr, tie: needCoinToss };
+    }
+
+    function showCoinToss(tie) {
+        bc.postMessage({ type: 'COIN_TOSS_START', tie: tie });
+        document.getElementById('coin-toss-modal').style.display = 'flex';
+        document.getElementById('coin-toss-buttons').innerHTML = `
+            <div class="ct-team-box"><span class="badge" style="background:${tie.t1.color}"></span> ${tie.t1.name}</div>
+            <button class="btn-green modal-btn" onclick="resolveCoinToss(${tie.t1.id})">Gewinnt das Stechen!</button>
+            <hr style="margin: 20px 0; border: 1px solid #eee;">
+            <div class="ct-team-box"><span class="badge" style="background:${tie.t2.color}"></span> ${tie.t2.name}</div>
+            <button class="btn-green modal-btn" onclick="resolveCoinToss(${tie.t2.id})">Gewinnt das Stechen!</button>
+        `;
+    }
+
+    function resolveCoinToss(winnerId) {
+        let team = state.teams.find(t => t.id === winnerId);
+        team.points += 0.01; 
+        document.getElementById('coin-toss-modal').style.display = 'none';
+        bc.postMessage({ type: 'COIN_TOSS_END' });
+        prepareKO(); 
+    }
+
     function prepareKO() {
         let adv = parseInt(document.getElementById('ko-advancing').value);
         let neededTeams = adv * state.groups.length;
-        
-        // Ermittle die nächste Zweierpotenz (4, 8, 16)
         let bracketSize = neededTeams <= 4 ? 4 : (neededTeams <= 8 ? 8 : 16);
-        let byesCount = bracketSize - neededTeams; // Anzahl der Freilose
+        let byesCount = bracketSize - neededTeams;
         
         let advancingTeams = [];
-        for(let i=0; i<state.groups.length; i++) {
-            let sortedGrp = [...state.groups[i]].map(t => state.teams.find(st => st.id === t.id)).sort((a,b) => b.points - a.points || b.diff - a.diff);
-            advancingTeams.push(...sortedGrp.slice(0, adv));
+        // NEUE LOGIK: Sammle erst alle Gruppensieger, dann alle Zweiten etc. (und vergleiche sie per Quote!)
+        for(let rank = 0; rank < adv; rank++) {
+            let pool = [];
+            for(let i=0; i<state.groups.length; i++) {
+                let res = sortTeamsStrict([...state.groups[i]].map(t => state.teams.find(st => st.id === t.id)), false);
+                if(tieBreakerQueue.length > 0) { handleCoinTossQueue(prepareKO); return; } 
+                if(res.sorted[rank]) pool.push(res.sorted[rank]);
+            }
+            // Pool nach PPG sortieren, da sie aus verschiedenen Gruppen kommen können
+            let sortedPoolRes = sortTeamsStrict(pool, true);
+            if(sortedPoolRes.tie) { showCoinToss(sortedPoolRes.tie); return; }
+            advancingTeams.push(...sortedPoolRes.sorted);
         }
 
-        let overall = [...state.teams].sort((a, b) => b.points - a.points || b.diff - a.diff);
-        // Falls wir auf 4/8/16 durch Lucky Loser auffüllen müssen (z.B. wenn neededTeams = 6, wir aber bracketSize=8 machen wollen. Warten, wir machen Freilose!)
-        // NEU: Wir füllen NICHT mehr auf! Wir nutzen Play-Offs (Freilose)!
-        advancingTeams.sort((a, b) => b.points - a.points || b.diff - a.diff);
-
-        state.stage = 'ko'; state.waitingTeams = advancingTeams.slice(0, byesCount); // Die Top Teams bekommen Freilos
-        let playOffTeams = advancingTeams.slice(byesCount); // Die restlichen müssen spielen
+        state.stage = 'ko'; 
+        state.waitingTeams = advancingTeams.slice(0, byesCount); // Die besten Teams bekommen ein Freilos
+        let playOffTeams = advancingTeams.slice(byesCount); // Die schlechteren müssen durch die Zwischenrunde
         
         let matches = [];
         let roundName = byesCount > 0 ? "Zwischenrunde" : (bracketSize === 4 ? 'Halbfinale' : (bracketSize === 8 ? 'Viertelfinale' : 'Achtelfinale'));
         
-        // Begegnungen für die erste Runde (Erster gegen Letzten des Play-Off Pools)
+        // Letzter gegen Ersten aus dem Play-Off Pool
         for(let i=0; i < playOffTeams.length / 2; i++) {
             matches.push({t1: playOffTeams[i], t2: playOffTeams[playOffTeams.length - 1 - i], score1: null, score2: null, isKO: true, koRound: roundName});
         }
@@ -335,17 +393,14 @@
 
         if (currentRoundName === "Zwischenrunde") {
             roundName = state.bracket.size === 16 ? "Viertelfinale" : (state.bracket.size === 8 ? "Halbfinale" : "Nächste Runde");
-            // Wir mischen die wartenden Teams (Freilose) mit den Gewinnern
             let allNextRoundTeams = [...state.waitingTeams, ...winners];
-            state.waitingTeams = []; // Leeren
+            state.waitingTeams = []; 
             
-            // Wieder Erster gegen Letzten
             for(let i=0; i < allNextRoundTeams.length / 2; i++) {
                 matches.push({t1: allNextRoundTeams[i], t2: allNextRoundTeams[allNextRoundTeams.length - 1 - i], score1: null, score2: null, isKO: true, koRound: roundName});
             }
         } 
         else if(currentRoundName === 'Halbfinale') {
-            // TRENNUNG VON FINALE UND PLATZ 3
             state.timeslots.push({ name: 'Spiel um Platz 3', matches: [{t1: losers[0], t2: losers[1], score1: null, score2: null, isKO: true, koRound: 'Platz 3'}] });
             state.timeslots.push({ name: 'Finale', matches: [{t1: winners[0], t2: winners[1], score1: null, score2: null, isKO: true, koRound: 'Finale'}] });
             saveState(); updateAdminView(); return; 
@@ -377,7 +432,6 @@
         const container = document.getElementById('active-matches'); const roundHeader = document.getElementById('round-header'); const btnContainer = document.getElementById('save-btn-container');
         container.innerHTML = ''; btnContainer.innerHTML = '';
         
-        // Zurück Button nur in Runde 1 oder 2 der Gruppenphase anzeigen
         document.getElementById('back-to-setup-btn').style.display = (state.currentSlot < 2 && state.stage === 'groups') ? 'inline-block' : 'none';
         document.getElementById('undo-btn').style.display = state.currentSlot > 0 ? 'block' : 'none';
 
@@ -431,10 +485,7 @@
             let m = slot.matches[index];
             const s1 = parseInt(document.getElementById(`score1-${index}`).value); const s2 = parseInt(document.getElementById(`score2-${index}`).value);
             if(isNaN(s1) || isNaN(s2)) return alert("Bitte alle Ergebnisse eintragen!");
-            if(m.isKO && s1 === s2) {
-                alert("In der K.O.-Phase gibt es kein Unentschieden! Bitte entscheidet das Spiel (z.B. Schampanja oder Golden Goal) und tragt +1 Punkt für den Sieger ein.");
-                return;
-            }
+            if(m.isKO && s1 === s2) return alert("In der K.O.-Phase gibt es kein Unentschieden! Bitte entscheidet das Spiel.");
             m.score1 = s1; m.score2 = s2;
             if(!m.isKO) {
                 let t1 = state.teams.find(t => t.id === m.t1.id); let t2 = state.teams.find(t => t.id === m.t2.id);
@@ -446,35 +497,29 @@
         let roundName = slot.matches[0].koRound;
         state.currentSlot++; state.phase = 'pause'; resetTimer(); 
         
-        // AUTO-ADVANCE in K.O. Phase 
         if (state.stage === 'ko') {
             let moreLeft = state.timeslots.slice(state.currentSlot).some(s => s.matches[0] && s.matches[0].koRound === roundName);
             if (!moreLeft && roundName !== 'Finale' && roundName !== 'Platz 3') {
                 advanceKO(roundName); return; 
             }
         }
-        
         saveState(); updateAdminView(); 
     }
 
-    // --- DER KUGELSICHERE UNDO KNOPF ---
     function undoLastRound() {
         if (state.currentSlot === 0 && state.stage === 'groups') return;
         state.stage = state.stage === 'finished' ? 'ko' : state.stage;
         
-        // Kahlschlag: Reißt alle automatisch generierten Zukunftsslots ab
         while (state.timeslots.length > state.currentSlot) state.timeslots.pop();
 
         state.currentSlot--; const slot = state.timeslots[state.currentSlot];
         
         if (slot.matches[0].isKO && slot.matches[0].score1 === null) {
-            // Wir stehen exakt am Anfang der K.O. Runde -> Komplett löschen und ins Setup Menü zurück
             state.timeslots.pop();
             if (state.currentSlot === 0 || !state.timeslots[state.currentSlot - 1].matches[0].isKO) {
                 state.stage = 'groups'; state.bracket = null; state.waitingTeams = [];
             }
         } else {
-            // Ein echtes Ergebnis wird gelöscht
             slot.matches.forEach(m => {
                 if (!m.isKO && m.score1 !== null) {
                     let t1 = state.teams.find(t => t.id === m.t1.id); let t2 = state.teams.find(t => t.id === m.t2.id);
