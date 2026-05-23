@@ -9,13 +9,22 @@
         body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); margin: 0; overflow-x: hidden; }
         .view { display: none; min-height: 100vh; padding: 40px; box-sizing: border-box; }
         
-        #active-phase { display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 0; position: relative; height: 100vh; }
-        #round-title { position: absolute; top: 30px; left: 40px; font-size: 2.5vw; color: #888; margin: 0; font-weight: bold; text-transform: uppercase; }
-        #timer { font-size: 28vw; font-weight: bold; line-height: 1; margin: 0; color: #111; font-variant-numeric: tabular-nums; transition: color 0.5s; margin-bottom: 8vh; }
+        /* NEU: Split-Screen Layout für Active Phase (Timer + Mini Tabellen) */
+        #active-phase { display: flex; flex-direction: row; justify-content: space-between; align-items: stretch; padding: 0; height: 100vh; }
+        #active-main { flex: 3; display: flex; flex-direction: column; justify-content: center; align-items: center; position: relative; }
+        #mini-tables-sidebar { flex: 1; background: var(--surface); border-left: 3px solid var(--border); padding: 20px; overflow-y: auto; box-shadow: -5px 0 15px rgba(0,0,0,0.05); }
+        
+        .mini-table { width: 100%; border-collapse: collapse; font-size: 0.9em; margin-bottom: 20px; }
+        .mini-table th, .mini-table td { padding: 5px; border-bottom: 1px solid #eee; text-align: left; }
+        .mini-table th { color: var(--primary); font-size: 0.8em; }
+        .mini-table h4 { margin: 0 0 5px 0; color: #666; font-size: 1.1em; }
+
+        #round-title { position: absolute; top: 30px; left: 40px; font-size: 2vw; color: #888; margin: 0; font-weight: bold; text-transform: uppercase; }
+        #timer { font-size: 22vw; font-weight: bold; line-height: 1; margin: 0; color: #111; font-variant-numeric: tabular-nums; transition: color 0.5s; margin-bottom: 10vh; }
         .timer-yellow { color: #ffc107 !important; } .timer-red { color: #dc3545 !important; animation: pulse 1s infinite; }
         @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(0.98); } 100% { transform: scale(1); } }
         
-        .current-matches { position: absolute; bottom: 0; left: 0; width: 100%; background: var(--primary); color: white; padding: 2vh 40px; box-sizing: border-box; display: flex; flex-wrap: wrap; justify-content: center; gap: 40px; font-size: 2.5vw; font-weight: bold; box-shadow: 0 -10px 30px rgba(0,0,0,0.15); }
+        .current-matches { position: absolute; bottom: 0; left: 0; width: 100%; background: var(--primary); color: white; padding: 2vh 40px; box-sizing: border-box; display: flex; flex-wrap: wrap; justify-content: center; gap: 40px; font-size: 2vw; font-weight: bold; box-shadow: 0 -10px 30px rgba(0,0,0,0.15); }
         
         .pause-view { display: flex; flex-direction: column; gap: 40px; }
         .flex-container { display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; width: 100%; }
@@ -28,19 +37,20 @@
         th { color: #666; font-size: 0.9em; text-transform: uppercase; }
         .badge { display: inline-block; width: 20px; height: 20px; border-radius: 50%; margin-right: 12px; vertical-align: middle; border: 2px solid rgba(0,0,0,0.1); flex-shrink: 0; }
         
-        /* BRACKET STYLING */
-        .bracket-container { display: flex; justify-content: center; align-items: stretch; width: 100%; gap: 10px; padding: 20px 0; height: 550px; }
-        .bracket-col { display: flex; flex-direction: column; flex: 1; justify-content: space-around; }
-        .center-col { flex: 1.2; align-items: center; justify-content: center; background: rgba(0,86,179,0.03); border-radius: 12px; padding: 10px; border: 2px dashed #0056b3; }
-        .match-box { background: white; border-radius: 6px; border: 2px solid #ccc; padding: 8px; display: flex; flex-direction: column; position: relative; box-shadow: 0 4px 8px rgba(0,0,0,0.05); margin: 5px 0; font-size: 0.9em; }
-        .finale-box { border: 3px solid #f1c40f; box-shadow: 0 0 20px rgba(241,196,15,0.4); transform: scale(1.05); z-index: 10; font-size: 1.1em; padding: 15px; }
-        .empty-match { opacity: 0.5; border-style: dashed; justify-content: center; align-items: center; font-style: italic; color: #888; height: 60px; }
-        .team-line { display: flex; justify-content: space-between; align-items: center; padding: 4px; font-weight: bold; border-radius: 4px; }
+        .bracket-container { display: flex; justify-content: center; align-items: stretch; width: 100%; gap: 15px; padding: 20px 0; height: 500px; }
+        .bracket-col { display: flex; flex-direction: column; width: 22%; }
+        .match-wrapper { flex-grow: 1; display: flex; flex-direction: column; }
+        .match-wrapper.space-around { justify-content: space-around; }
+        .match-wrapper.center { justify-content: center; }
+        .center-col { width: 25%; align-items: center; justify-content: center; background: rgba(0,86,179,0.03); border-radius: 12px; padding: 20px; border: 2px dashed #0056b3; }
+        .match-box { background: white; border-radius: 6px; border: 2px solid #ccc; padding: 10px; display: flex; flex-direction: column; position: relative; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
+        .finale-box { border: 3px solid #f1c40f; box-shadow: 0 0 20px rgba(241,196,15,0.4); transform: scale(1.05); z-index: 10; }
+        .empty-match { opacity: 0.5; border-style: dashed; justify-content: center; align-items: center; font-style: italic; color: #888; height: 80px; }
+        .team-line { display: flex; justify-content: space-between; align-items: center; padding: 5px; font-weight: bold; font-size: 1.1em; border-radius: 4px; }
         .team-winner { background: #d4edda; color: #155724; }
         .team-loser { opacity: 0.4; text-decoration: line-through; }
-        .score-box { background: rgba(0,0,0,0.08); padding: 2px 6px; border-radius: 4px; min-width: 20px; text-align: center; color: #333; font-family: monospace; margin-left: 5px; }
+        .score-box { background: rgba(0,0,0,0.08); padding: 2px 8px; border-radius: 4px; min-width: 25px; text-align: center; color: #333; font-family: monospace; font-size: 1.1em; margin-left: 10px; }
         
-        /* GIGANTISCHES PODIUM STYLING */
         #finished-phase { padding: 20px; display: flex; flex-direction: column; justify-content: space-between; align-items: center; height: 100vh; }
         .podium-container { display: flex; align-items: flex-end; justify-content: center; width: 100%; flex-grow: 1; gap: 2vw; margin-top: 2vh; margin-bottom: 2vh; }
         .podium-step { display: flex; flex-direction: column; align-items: center; width: 28%; text-align: center; border-radius: 15px 15px 0 0; position: relative; box-shadow: inset 0 0 30px rgba(0,0,0,0.3), 0 -10px 25px rgba(0,0,0,0.15); transition: height 0.5s ease-out; }
@@ -51,6 +61,8 @@
         .truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         
         #waiting-screen { display: flex; justify-content: center; align-items: center; height: 100vh; font-size: 3em; color: #666; font-weight: bold; }
+        
+        #coin-toss-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 2000; flex-direction: column; justify-content: center; align-items: center; color: white; text-align: center; }
     </style>
 </head>
 <body>
@@ -58,10 +70,18 @@
 <audio id="horn-sound" src="sound.mp3" preload="auto"></audio>
 <div id="waiting-screen">Warte auf Verbindung zum Turnierleiter...</div>
 
+<div id="coin-toss-overlay">
+    <h1 style="color: #dc3545; font-size: 6vw; text-transform: uppercase; margin-bottom: 20px; text-shadow: 0 4px 10px rgba(0,0,0,0.5);">⚠️ Exakter Gleichstand ⚠️</h1>
+    <h3 style="font-size: 3vw; font-weight: normal; margin-bottom: 50px;">Turnierleitung ermittelt Sieger (Tie-Breaker)</h3>
+</div>
+
 <div id="active-phase" class="view">
-    <div id="round-title">Aktuelle Spiele</div>
-    <div id="timer">12:00</div>
-    <div id="current-matches-display" class="current-matches"></div>
+    <div id="active-main">
+        <div id="round-title">Aktuelle Spiele</div>
+        <div id="timer">12:00</div>
+        <div id="current-matches-display" class="current-matches"></div>
+    </div>
+    <div id="mini-tables-sidebar"></div>
 </div>
 
 <div id="pause-phase" class="view pause-view">
@@ -93,6 +113,8 @@
     bc.onmessage = (event) => {
         if(event.data.type === 'STATE_UPDATE') { currentState = event.data.state; render(); }
         if(event.data.type === 'TIMER_TICK') updateTimerDisplay(event.data.time);
+        if(event.data.type === 'COIN_TOSS_START') document.getElementById('coin-toss-overlay').style.display = 'flex';
+        if(event.data.type === 'COIN_TOSS_END') document.getElementById('coin-toss-overlay').style.display = 'none';
         if(event.data.type === 'HORN') { 
             document.body.style.backgroundColor = "#ffc107"; 
             document.getElementById('horn-sound').play().catch(()=>{});
@@ -130,7 +152,7 @@
                 renderTables(); renderSchedule();
             }
         } else {
-            renderActiveMatches(); updateTimerDisplay(currentState.timeRemaining);
+            renderActiveMatches(); renderMiniTables(); updateTimerDisplay(currentState.timeRemaining);
         }
     }
 
@@ -151,10 +173,34 @@
         document.getElementById('current-matches-display').innerHTML = html;
     }
 
+    function renderMiniTables() {
+        if(currentState.stage === 'ko') { document.getElementById('mini-tables-sidebar').style.display = 'none'; return; }
+        document.getElementById('mini-tables-sidebar').style.display = 'block';
+        
+        let html = '';
+        currentState.groups.forEach((group, i) => {
+            let sortedTeams = [...group].map(t => currentState.teams.find(st => st.id === t.id)).sort((a, b) => {
+                let pA = a.played > 0 ? a.points/a.played : 0; let pB = b.played > 0 ? b.points/b.played : 0;
+                if(pB !== pA) return pB - pA;
+                return (b.played > 0 ? b.diff/b.played : 0) - (a.played > 0 ? a.diff/a.played : 0);
+            });
+            html += `<h4>Gruppe ${String.fromCharCode(65 + i)}</h4><table class="mini-table"><tr><th>Pl</th><th>Team</th><th>Pkt</th><th>Diff</th></tr>`;
+            sortedTeams.forEach((t, idx) => {
+                html += `<tr><td>${idx+1}.</td><td><span class="badge" style="background:${t.color}; width:10px; height:10px; border:1px solid #ccc;"></span><span class="truncate" style="max-width:80px;">${t.name}</span></td><td>${Math.floor(t.points)}</td><td>${t.diff > 0 ? '+'+t.diff : t.diff}</td></tr>`;
+            });
+            html += `</table>`;
+        });
+        document.getElementById('mini-tables-sidebar').innerHTML = html;
+    }
+
     function renderTables() {
         let html = '';
         currentState.groups.forEach((group, i) => {
-            let sortedTeams = [...group].map(t => currentState.teams.find(st => st.id === t.id)).sort((a, b) => b.points - a.points || b.diff - a.diff);
+            let sortedTeams = [...group].map(t => currentState.teams.find(st => st.id === t.id)).sort((a, b) => {
+                let pA = a.played > 0 ? a.points/a.played : 0; let pB = b.played > 0 ? b.points/b.played : 0;
+                if(pB !== pA) return pB - pA;
+                return (b.played > 0 ? b.diff/b.played : 0) - (a.played > 0 ? a.diff/a.played : 0);
+            });
             html += `<div class="card"><h3>Gruppe ${String.fromCharCode(65 + i)}</h3><table><tr><th>Team</th><th>Sp</th><th>Pkt</th><th>Diff</th></tr>`;
             sortedTeams.forEach((t, idx) => {
                 html += `<tr><td><div style="display:flex; align-items:center;"><strong style="color:#999; margin-right:10px;">${idx+1}.</strong><span class="badge" style="background:${t.color}"></span><strong class="truncate" style="max-width: 150px;">${t.name}</strong></div></td><td>${t.played}</td><td><strong>${Math.floor(t.points)}</strong></td><td>${t.diff > 0 ? '+'+t.diff : t.diff}</td></tr>`;
@@ -199,15 +245,15 @@
         
         return `<div class="match-box ${finClass}">
             <div class="team-line ${w1}">
-                <div style="display:flex; align-items:center; overflow:hidden; padding-right: 5px;">
-                    <span class="badge" style="background:${m.t1.color}"></span><span class="truncate" style="max-width: 90px;">${m.t1.name}</span>
+                <div style="display:flex; align-items:center; overflow:hidden; padding-right: 10px;">
+                    <span class="badge" style="background:${m.t1.color}"></span><span class="truncate" style="max-width: 100px;">${m.t1.name}</span>
                 </div>
                 <div class="score-box">${s1}</div>
             </div>
             <div style="border-top:1px solid var(--border); margin: 3px 0;"></div>
             <div class="team-line ${w2}">
-                <div style="display:flex; align-items:center; overflow:hidden; padding-right: 5px;">
-                    <span class="badge" style="background:${m.t2.color}"></span><span class="truncate" style="max-width: 90px;">${m.t2.name}</span>
+                <div style="display:flex; align-items:center; overflow:hidden; padding-right: 10px;">
+                    <span class="badge" style="background:${m.t2.color}"></span><span class="truncate" style="max-width: 100px;">${m.t2.name}</span>
                 </div>
                 <div class="score-box">${s2}</div>
             </div>
@@ -217,55 +263,36 @@
     function renderBracket() {
         if(!currentState.bracket) return;
         let html = '';
-        let zr = getMatchesFromHistory('Zwischenrunde'); let af = getMatchesFromHistory('Achtelfinale');
-        let vf = getMatchesFromHistory('Viertelfinale'); let hf = getMatchesFromHistory('Halbfinale'); 
+        let vf = getMatchesFromHistory('Viertelfinale'); let zr = getMatchesFromHistory('Zwischenrunde');
+        let hf = getMatchesFromHistory('Halbfinale'); 
         let fin = getMatchesFromHistory('Finale'); let p3 = getMatchesFromHistory('Platz 3');
 
-        // GANZ LINKS (Achtelfinale oder Play-Offs)
-        if(currentState.bracket.size === 16 || currentState.bracket.byes > 0) {
-            let title = currentState.bracket.size === 16 ? 'Achtelfinale' : 'Zwischenrunde';
-            let src = currentState.bracket.size === 16 ? af : zr;
-            html += `<div class="bracket-col"><h3 style="text-align:center; color:#888; font-size:1em;">${title}</h3>`;
-            for(let i=0; i<src.length/2; i++) html += createMatchBox(src[i]);
-            html += `</div>`;
-        }
-
-        // LINKS (Viertelfinale)
-        if(currentState.bracket.size >= 8) {
-            html += `<div class="bracket-col"><h3 style="text-align:center; color:#888; font-size:1em;">Viertelfinale</h3><div class="match-wrapper space-around">`;
-            html += createMatchBox(vf[0]) + createMatchBox(vf[1]);
-            html += `</div></div>`;
+        if(currentState.bracket.size === 8 || currentState.bracket.size === 6) {
+            let title = currentState.bracket.size === 6 ? 'Play-Offs' : 'Viertelfinale';
+            let m1 = currentState.bracket.size === 6 ? zr[0] : vf[0];
+            let m2 = currentState.bracket.size === 6 ? null : vf[1]; 
+            html += `<div class="bracket-col"><h3 style="text-align:center; color:#888;">${title}</h3>
+                     <div class="match-wrapper space-around">${createMatchBox(m1)} ${currentState.bracket.size===8 ? createMatchBox(m2) : ''}</div></div>`;
         }
         
-        // HALBFINALE LINKS
-        html += `<div class="bracket-col"><h3 style="text-align:center; color:#888; font-size:1em;">Halbfinale</h3>
+        html += `<div class="bracket-col"><h3 style="text-align:center; color:#888;">Halbfinale</h3>
                  <div class="match-wrapper center">${createMatchBox(hf[0])}</div></div>`;
 
-        // MITTE (FINALE & P3)
-        html += `<div class="bracket-col center-col" style="flex: 1.5;">
+        html += `<div class="bracket-col center-col">
                     <h2 style="margin:0 0 10px 0; color:var(--primary); font-size:2em;">🏆 Finale</h2>
                     ${createMatchBox(fin[0], true)}
                     ${p3.length > 0 ? `<h4 style="margin: 25px 0 5px 0; color:#888;">Spiel um Platz 3</h4>${createMatchBox(p3[0])}` : ''}
                  </div>`;
 
-        // HALBFINALE RECHTS
-        html += `<div class="bracket-col"><h3 style="text-align:center; color:#888; font-size:1em;">Halbfinale</h3>
+        html += `<div class="bracket-col"><h3 style="text-align:center; color:#888;">Halbfinale</h3>
                  <div class="match-wrapper center">${createMatchBox(hf[1])}</div></div>`;
 
-        // RECHTS (Viertelfinale)
-        if(currentState.bracket.size >= 8) {
-            html += `<div class="bracket-col"><h3 style="text-align:center; color:#888; font-size:1em;">Viertelfinale</h3><div class="match-wrapper space-around">`;
-            html += createMatchBox(vf[2]) + createMatchBox(vf[3]);
-            html += `</div></div>`;
-        }
-
-        // GANZ RECHTS (Achtelfinale oder Play-Offs)
-        if(currentState.bracket.size === 16 || currentState.bracket.byes > 0) {
-            let title = currentState.bracket.size === 16 ? 'Achtelfinale' : 'Zwischenrunde';
-            let src = currentState.bracket.size === 16 ? af : zr;
-            html += `<div class="bracket-col"><h3 style="text-align:center; color:#888; font-size:1em;">${title}</h3>`;
-            for(let i=src.length/2; i<src.length; i++) html += createMatchBox(src[i]);
-            html += `</div>`;
+        if(currentState.bracket.size === 8 || currentState.bracket.size === 6) {
+            let title = currentState.bracket.size === 6 ? 'Play-Offs' : 'Viertelfinale';
+            let m1 = currentState.bracket.size === 6 ? zr[1] : vf[2]; 
+            let m2 = currentState.bracket.size === 6 ? null : vf[3];
+            html += `<div class="bracket-col"><h3 style="text-align:center; color:#888;">${title}</h3>
+                     <div class="match-wrapper space-around">${createMatchBox(m1)} ${currentState.bracket.size===8 ? createMatchBox(m2) : ''}</div></div>`;
         }
 
         document.getElementById('bracket-content').innerHTML = html;
